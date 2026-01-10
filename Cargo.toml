@@ -1,0 +1,50 @@
+[package]
+name = "lf"
+version = "0.1.0"
+edition = "2021"
+description = "A command-line interface for Langfuse observability platform"
+authors = ["Langfuse CLI Contributors"]
+license = "MIT"
+
+[[bin]]
+name = "lf"
+path = "src/main.rs"
+
+[dependencies]
+# CLI framework
+clap = { version = "4", features = ["derive", "env"] }
+
+# Async runtime and HTTP
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Date/time parsing
+chrono = { version = "0.4", features = ["serde"] }
+
+# Output formatting
+tabled = "0.16"
+csv = "1.3"
+
+# Configuration
+directories = "5"
+dirs = "5"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# User input
+dialoguer = "0.11"
+
+# Environment
+dotenvy = "0.15"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
