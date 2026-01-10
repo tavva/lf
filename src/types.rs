@@ -247,3 +247,517 @@ pub struct PaginationMeta {
     pub total_items: Option<i32>,
     pub total_pages: Option<i32>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ========== OutputFormat Tests ==========
+
+    #[test]
+    fn test_output_format_default() {
+        let format = OutputFormat::default();
+        assert_eq!(format, OutputFormat::Table);
+    }
+
+    #[test]
+    fn test_output_format_serialize() {
+        assert_eq!(
+            serde_json::to_string(&OutputFormat::Table).unwrap(),
+            "\"table\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OutputFormat::Json).unwrap(),
+            "\"json\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OutputFormat::Csv).unwrap(),
+            "\"csv\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OutputFormat::Markdown).unwrap(),
+            "\"markdown\""
+        );
+    }
+
+    #[test]
+    fn test_output_format_deserialize() {
+        assert_eq!(
+            serde_json::from_str::<OutputFormat>("\"table\"").unwrap(),
+            OutputFormat::Table
+        );
+        assert_eq!(
+            serde_json::from_str::<OutputFormat>("\"json\"").unwrap(),
+            OutputFormat::Json
+        );
+        assert_eq!(
+            serde_json::from_str::<OutputFormat>("\"csv\"").unwrap(),
+            OutputFormat::Csv
+        );
+        assert_eq!(
+            serde_json::from_str::<OutputFormat>("\"markdown\"").unwrap(),
+            OutputFormat::Markdown
+        );
+    }
+
+    // ========== Measure Tests ==========
+
+    #[test]
+    fn test_measure_to_api_string() {
+        assert_eq!(Measure::Count.to_api_string(), "count");
+        assert_eq!(Measure::Latency.to_api_string(), "latency");
+        assert_eq!(Measure::InputTokens.to_api_string(), "inputTokens");
+        assert_eq!(Measure::OutputTokens.to_api_string(), "outputTokens");
+        assert_eq!(Measure::TotalTokens.to_api_string(), "totalTokens");
+        assert_eq!(Measure::InputCost.to_api_string(), "inputCost");
+        assert_eq!(Measure::OutputCost.to_api_string(), "outputCost");
+        assert_eq!(Measure::TotalCost.to_api_string(), "totalCost");
+    }
+
+    #[test]
+    fn test_measure_serialize() {
+        assert_eq!(serde_json::to_string(&Measure::Count).unwrap(), "\"count\"");
+        assert_eq!(
+            serde_json::to_string(&Measure::InputTokens).unwrap(),
+            "\"inputtokens\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Measure::TotalCost).unwrap(),
+            "\"totalcost\""
+        );
+    }
+
+    // ========== Aggregation Tests ==========
+
+    #[test]
+    fn test_aggregation_to_api_string() {
+        assert_eq!(Aggregation::Count.to_api_string(), "count");
+        assert_eq!(Aggregation::Sum.to_api_string(), "sum");
+        assert_eq!(Aggregation::Avg.to_api_string(), "avg");
+        assert_eq!(Aggregation::P50.to_api_string(), "p50");
+        assert_eq!(Aggregation::P95.to_api_string(), "p95");
+        assert_eq!(Aggregation::P99.to_api_string(), "p99");
+        assert_eq!(Aggregation::Histogram.to_api_string(), "histogram");
+    }
+
+    #[test]
+    fn test_aggregation_serialize() {
+        assert_eq!(
+            serde_json::to_string(&Aggregation::Count).unwrap(),
+            "\"count\""
+        );
+        assert_eq!(serde_json::to_string(&Aggregation::P95).unwrap(), "\"p95\"");
+    }
+
+    // ========== TimeGranularity Tests ==========
+
+    #[test]
+    fn test_time_granularity_to_api_string() {
+        assert_eq!(TimeGranularity::Auto.to_api_string(), "auto");
+        assert_eq!(TimeGranularity::Minute.to_api_string(), "minute");
+        assert_eq!(TimeGranularity::Hour.to_api_string(), "hour");
+        assert_eq!(TimeGranularity::Day.to_api_string(), "day");
+        assert_eq!(TimeGranularity::Week.to_api_string(), "week");
+        assert_eq!(TimeGranularity::Month.to_api_string(), "month");
+    }
+
+    #[test]
+    fn test_time_granularity_serialize() {
+        assert_eq!(
+            serde_json::to_string(&TimeGranularity::Auto).unwrap(),
+            "\"auto\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TimeGranularity::Month).unwrap(),
+            "\"month\""
+        );
+    }
+
+    // ========== ObservationType Tests ==========
+
+    #[test]
+    fn test_observation_type_to_api_string() {
+        assert_eq!(ObservationType::Generation.to_api_string(), "GENERATION");
+        assert_eq!(ObservationType::Span.to_api_string(), "SPAN");
+        assert_eq!(ObservationType::Event.to_api_string(), "EVENT");
+    }
+
+    #[test]
+    fn test_observation_type_serialize() {
+        assert_eq!(
+            serde_json::to_string(&ObservationType::Generation).unwrap(),
+            "\"GENERATION\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ObservationType::Span).unwrap(),
+            "\"SPAN\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ObservationType::Event).unwrap(),
+            "\"EVENT\""
+        );
+    }
+
+    // ========== Trace Tests ==========
+
+    #[test]
+    fn test_trace_deserialize() {
+        let json = json!({
+            "id": "trace-123",
+            "name": "my-trace",
+            "userId": "user-456",
+            "sessionId": "session-789",
+            "release": "v1.0.0",
+            "version": "1",
+            "metadata": {"key": "value"},
+            "tags": ["tag1", "tag2"],
+            "input": {"prompt": "Hello"},
+            "output": {"response": "World"},
+            "timestamp": "2024-01-15T10:30:00Z"
+        });
+
+        let trace: Trace = serde_json::from_value(json).unwrap();
+
+        assert_eq!(trace.id, "trace-123");
+        assert_eq!(trace.name, Some("my-trace".to_string()));
+        assert_eq!(trace.user_id, Some("user-456".to_string()));
+        assert_eq!(trace.session_id, Some("session-789".to_string()));
+        assert_eq!(trace.release, Some("v1.0.0".to_string()));
+        assert_eq!(trace.tags, Some(vec!["tag1".to_string(), "tag2".to_string()]));
+        assert!(trace.observations.is_empty());
+    }
+
+    #[test]
+    fn test_trace_deserialize_minimal() {
+        let json = json!({
+            "id": "trace-min"
+        });
+
+        let trace: Trace = serde_json::from_value(json).unwrap();
+
+        assert_eq!(trace.id, "trace-min");
+        assert!(trace.name.is_none());
+        assert!(trace.user_id.is_none());
+        assert!(trace.observations.is_empty());
+    }
+
+    #[test]
+    fn test_trace_serialize() {
+        let trace = Trace {
+            id: "trace-123".to_string(),
+            name: Some("test".to_string()),
+            user_id: None,
+            session_id: None,
+            release: None,
+            version: None,
+            metadata: None,
+            tags: Some(vec!["tag1".to_string()]),
+            input: None,
+            output: None,
+            timestamp: None,
+            observations: vec![],
+        };
+
+        let json = serde_json::to_value(&trace).unwrap();
+
+        assert_eq!(json["id"], "trace-123");
+        assert_eq!(json["name"], "test");
+        assert!(json["tags"].as_array().unwrap().contains(&json!("tag1")));
+    }
+
+    // ========== Session Tests ==========
+
+    #[test]
+    fn test_session_deserialize() {
+        let json = json!({
+            "id": "session-123",
+            "createdAt": "2024-01-15T10:30:00Z",
+            "projectId": "project-456"
+        });
+
+        let session: Session = serde_json::from_value(json).unwrap();
+
+        assert_eq!(session.id, "session-123");
+        assert_eq!(session.created_at, Some("2024-01-15T10:30:00Z".to_string()));
+        assert_eq!(session.project_id, Some("project-456".to_string()));
+        assert!(session.traces.is_empty());
+    }
+
+    #[test]
+    fn test_session_with_traces() {
+        let json = json!({
+            "id": "session-123",
+            "traces": [
+                {"id": "trace-1"},
+                {"id": "trace-2"}
+            ]
+        });
+
+        let session: Session = serde_json::from_value(json).unwrap();
+
+        assert_eq!(session.traces.len(), 2);
+        assert_eq!(session.traces[0].id, "trace-1");
+        assert_eq!(session.traces[1].id, "trace-2");
+    }
+
+    // ========== Observation Tests ==========
+
+    #[test]
+    fn test_observation_deserialize() {
+        let json = json!({
+            "id": "obs-123",
+            "traceId": "trace-456",
+            "type": "GENERATION",
+            "name": "my-observation",
+            "startTime": "2024-01-15T10:30:00Z",
+            "endTime": "2024-01-15T10:30:01Z",
+            "model": "gpt-4",
+            "level": "DEFAULT"
+        });
+
+        let obs: Observation = serde_json::from_value(json).unwrap();
+
+        assert_eq!(obs.id, "obs-123");
+        assert_eq!(obs.trace_id, Some("trace-456".to_string()));
+        assert_eq!(obs.r#type, Some("GENERATION".to_string()));
+        assert_eq!(obs.name, Some("my-observation".to_string()));
+        assert_eq!(obs.model, Some("gpt-4".to_string()));
+    }
+
+    #[test]
+    fn test_observation_with_usage() {
+        let json = json!({
+            "id": "obs-123",
+            "usage": {
+                "input": 100,
+                "output": 50,
+                "total": 150,
+                "unit": "TOKENS",
+                "inputCost": 0.001,
+                "outputCost": 0.002,
+                "totalCost": 0.003
+            }
+        });
+
+        let obs: Observation = serde_json::from_value(json).unwrap();
+
+        let usage = obs.usage.unwrap();
+        assert_eq!(usage.input, Some(100));
+        assert_eq!(usage.output, Some(50));
+        assert_eq!(usage.total, Some(150));
+        assert_eq!(usage.unit, Some("TOKENS".to_string()));
+        assert_eq!(usage.input_cost, Some(0.001));
+        assert_eq!(usage.output_cost, Some(0.002));
+        assert_eq!(usage.total_cost, Some(0.003));
+    }
+
+    // ========== Score Tests ==========
+
+    #[test]
+    fn test_score_deserialize() {
+        let json = json!({
+            "id": "score-123",
+            "traceId": "trace-456",
+            "observationId": "obs-789",
+            "name": "accuracy",
+            "value": 0.95,
+            "source": "API",
+            "comment": "Test score",
+            "timestamp": "2024-01-15T10:30:00Z",
+            "dataType": "NUMERIC"
+        });
+
+        let score: Score = serde_json::from_value(json).unwrap();
+
+        assert_eq!(score.id, "score-123");
+        assert_eq!(score.trace_id, Some("trace-456".to_string()));
+        assert_eq!(score.observation_id, Some("obs-789".to_string()));
+        assert_eq!(score.name, Some("accuracy".to_string()));
+        assert_eq!(score.source, Some("API".to_string()));
+        assert_eq!(score.data_type, Some("NUMERIC".to_string()));
+    }
+
+    #[test]
+    fn test_score_with_string_value() {
+        let json = json!({
+            "id": "score-123",
+            "stringValue": "good"
+        });
+
+        let score: Score = serde_json::from_value(json).unwrap();
+
+        assert_eq!(score.string_value, Some("good".to_string()));
+    }
+
+    // ========== Usage Tests ==========
+
+    #[test]
+    fn test_usage_deserialize() {
+        let json = json!({
+            "input": 500,
+            "output": 200,
+            "total": 700,
+            "unit": "TOKENS",
+            "inputCost": 0.01,
+            "outputCost": 0.02,
+            "totalCost": 0.03
+        });
+
+        let usage: Usage = serde_json::from_value(json).unwrap();
+
+        assert_eq!(usage.input, Some(500));
+        assert_eq!(usage.output, Some(200));
+        assert_eq!(usage.total, Some(700));
+        assert_eq!(usage.unit, Some("TOKENS".to_string()));
+    }
+
+    #[test]
+    fn test_usage_partial() {
+        let json = json!({
+            "input": 100
+        });
+
+        let usage: Usage = serde_json::from_value(json).unwrap();
+
+        assert_eq!(usage.input, Some(100));
+        assert!(usage.output.is_none());
+        assert!(usage.total.is_none());
+    }
+
+    // ========== MetricsResult Tests ==========
+
+    #[test]
+    fn test_metrics_result_deserialize() {
+        let json = json!({
+            "data": [
+                {"name": "metric1", "value": 100},
+                {"name": "metric2", "value": 200}
+            ]
+        });
+
+        let result: MetricsResult = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.data.len(), 2);
+        assert_eq!(result.data[0].get("name").unwrap(), &json!("metric1"));
+        assert_eq!(result.data[1].get("value").unwrap(), &json!(200));
+    }
+
+    #[test]
+    fn test_metrics_result_empty() {
+        let json = json!({});
+
+        let result: MetricsResult = serde_json::from_value(json).unwrap();
+
+        assert!(result.data.is_empty());
+    }
+
+    // ========== Response Wrapper Tests ==========
+
+    #[test]
+    fn test_traces_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"id": "trace-1"},
+                {"id": "trace-2"}
+            ],
+            "meta": {
+                "page": 1,
+                "limit": 50,
+                "totalItems": 100,
+                "totalPages": 2
+            }
+        });
+
+        let response: TracesResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+        let meta = response.meta.unwrap();
+        assert_eq!(meta.page, Some(1));
+        assert_eq!(meta.limit, Some(50));
+        assert_eq!(meta.total_items, Some(100));
+        assert_eq!(meta.total_pages, Some(2));
+    }
+
+    #[test]
+    fn test_sessions_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"id": "session-1"},
+                {"id": "session-2"}
+            ]
+        });
+
+        let response: SessionsResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+        assert!(response.meta.is_none());
+    }
+
+    #[test]
+    fn test_observations_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"id": "obs-1", "type": "GENERATION"},
+                {"id": "obs-2", "type": "SPAN"}
+            ],
+            "meta": {
+                "page": 2,
+                "totalPages": 5
+            }
+        });
+
+        let response: ObservationsResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+        assert_eq!(response.data[0].r#type, Some("GENERATION".to_string()));
+    }
+
+    #[test]
+    fn test_scores_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"id": "score-1", "name": "accuracy"},
+                {"id": "score-2", "name": "relevance"}
+            ]
+        });
+
+        let response: ScoresResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+        assert_eq!(response.data[0].name, Some("accuracy".to_string()));
+    }
+
+    // ========== PaginationMeta Tests ==========
+
+    #[test]
+    fn test_pagination_meta_deserialize() {
+        let json = json!({
+            "page": 3,
+            "limit": 100,
+            "totalItems": 500,
+            "totalPages": 5
+        });
+
+        let meta: PaginationMeta = serde_json::from_value(json).unwrap();
+
+        assert_eq!(meta.page, Some(3));
+        assert_eq!(meta.limit, Some(100));
+        assert_eq!(meta.total_items, Some(500));
+        assert_eq!(meta.total_pages, Some(5));
+    }
+
+    #[test]
+    fn test_pagination_meta_partial() {
+        let json = json!({
+            "page": 1
+        });
+
+        let meta: PaginationMeta = serde_json::from_value(json).unwrap();
+
+        assert_eq!(meta.page, Some(1));
+        assert!(meta.limit.is_none());
+        assert!(meta.total_items.is_none());
+        assert!(meta.total_pages.is_none());
+    }
+}

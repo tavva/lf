@@ -89,3 +89,231 @@ impl TableFormatter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ========== Basic Formatting Tests ==========
+
+    #[test]
+    fn test_format_empty_array() {
+        let data: Vec<serde_json::Value> = vec![];
+        let result = TableFormatter::format(&data).unwrap();
+        assert_eq!(result, "No data to display");
+    }
+
+    #[test]
+    fn test_format_null() {
+        let data: Option<String> = None;
+        let result = TableFormatter::format(&data).unwrap();
+        assert_eq!(result, "No data to display");
+    }
+
+    #[test]
+    fn test_format_single_object() {
+        let data = json!({
+            "id": "123",
+            "name": "test"
+        });
+        let result = TableFormatter::format(&data).unwrap();
+
+        // Should contain table formatting and data
+        assert!(result.contains("id"));
+        assert!(result.contains("name"));
+        assert!(result.contains("123"));
+        assert!(result.contains("test"));
+    }
+
+    #[test]
+    fn test_format_array_of_objects() {
+        let data = vec![
+            json!({"id": "1", "status": "active"}),
+            json!({"id": "2", "status": "inactive"}),
+        ];
+        let result = TableFormatter::format(&data).unwrap();
+
+        assert!(result.contains("id"));
+        assert!(result.contains("status"));
+        assert!(result.contains("1"));
+        assert!(result.contains("2"));
+        assert!(result.contains("active"));
+        assert!(result.contains("inactive"));
+    }
+
+    #[test]
+    fn test_format_primitive_value() {
+        let data = "simple string";
+        let result = TableFormatter::format(&data).unwrap();
+        assert!(result.contains("simple string"));
+    }
+
+    #[test]
+    fn test_format_number() {
+        let data = 42;
+        let result = TableFormatter::format(&data).unwrap();
+        assert!(result.contains("42"));
+    }
+
+    #[test]
+    fn test_format_boolean() {
+        let data = true;
+        let result = TableFormatter::format(&data).unwrap();
+        assert!(result.contains("true"));
+    }
+
+    // ========== Value Formatting Tests ==========
+
+    #[test]
+    fn test_format_value_none() {
+        let result = TableFormatter::format_value(None);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_format_value_null() {
+        let result = TableFormatter::format_value(Some(&Value::Null));
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_format_value_string() {
+        let value = json!("hello");
+        let result = TableFormatter::format_value(Some(&value));
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_format_value_number() {
+        let value = json!(123);
+        let result = TableFormatter::format_value(Some(&value));
+        assert_eq!(result, "123");
+
+        let float_value = json!(45.67);
+        let result = TableFormatter::format_value(Some(&float_value));
+        assert_eq!(result, "45.67");
+    }
+
+    #[test]
+    fn test_format_value_boolean() {
+        let true_val = json!(true);
+        assert_eq!(TableFormatter::format_value(Some(&true_val)), "true");
+
+        let false_val = json!(false);
+        assert_eq!(TableFormatter::format_value(Some(&false_val)), "false");
+    }
+
+    #[test]
+    fn test_format_value_array_short() {
+        let value = json!([1, 2, 3]);
+        let result = TableFormatter::format_value(Some(&value));
+        assert_eq!(result, "[1,2,3]");
+    }
+
+    #[test]
+    fn test_format_value_array_long() {
+        let value = json!(["this", "is", "a", "very", "long", "array", "that", "should", "be", "truncated"]);
+        let result = TableFormatter::format_value(Some(&value));
+        assert!(result.ends_with("..."));
+        assert!(result.len() <= 53); // 50 + "..."
+    }
+
+    #[test]
+    fn test_format_value_object_short() {
+        let value = json!({"a": 1});
+        let result = TableFormatter::format_value(Some(&value));
+        assert_eq!(result, "{\"a\":1}");
+    }
+
+    #[test]
+    fn test_format_value_object_long() {
+        let value = json!({
+            "long_key_name": "this is a very long value that should be truncated"
+        });
+        let result = TableFormatter::format_value(Some(&value));
+        assert!(result.ends_with("..."));
+        assert!(result.len() <= 53); // 50 + "..."
+    }
+
+    // ========== Truncation Tests ==========
+
+    #[test]
+    fn test_truncate_string_short() {
+        let result = TableFormatter::truncate_string("short", 50);
+        assert_eq!(result, "short");
+    }
+
+    #[test]
+    fn test_truncate_string_exact() {
+        let s = "x".repeat(50);
+        let result = TableFormatter::truncate_string(&s, 50);
+        assert_eq!(result, s);
+    }
+
+    #[test]
+    fn test_truncate_string_long() {
+        let s = "x".repeat(100);
+        let result = TableFormatter::truncate_string(&s, 50);
+        assert_eq!(result.len(), 53); // 50 + "..."
+        assert!(result.ends_with("..."));
+    }
+
+    // ========== Edge Cases ==========
+
+    #[test]
+    fn test_format_objects_with_different_keys() {
+        let data = vec![
+            json!({"id": "1", "name": "Alice"}),
+            json!({"id": "2", "email": "bob@test.com"}),
+        ];
+        let result = TableFormatter::format(&data).unwrap();
+
+        // Should contain all keys from both objects
+        assert!(result.contains("id"));
+        assert!(result.contains("name"));
+        assert!(result.contains("email"));
+    }
+
+    #[test]
+    fn test_format_nested_object() {
+        let data = json!({
+            "id": "1",
+            "metadata": {"key": "value"}
+        });
+        let result = TableFormatter::format(&data).unwrap();
+
+        assert!(result.contains("id"));
+        assert!(result.contains("metadata"));
+        assert!(result.contains("1"));
+    }
+
+    #[test]
+    fn test_format_with_empty_strings() {
+        let data = json!({
+            "id": "",
+            "name": ""
+        });
+        let result = TableFormatter::format(&data).unwrap();
+
+        assert!(result.contains("id"));
+        assert!(result.contains("name"));
+    }
+
+    #[test]
+    fn test_format_array_with_non_objects() {
+        let data = vec![json!("string1"), json!("string2")];
+        let result = TableFormatter::format(&data).unwrap();
+        // Non-objects should result in empty cells but not error
+        assert!(result.contains("No data to display") || result.len() > 0);
+    }
+
+    #[test]
+    fn test_format_special_characters() {
+        let data = json!({
+            "message": "Hello\nWorld\tTab"
+        });
+        let result = TableFormatter::format(&data).unwrap();
+        assert!(result.contains("message"));
+    }
+}

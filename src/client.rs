@@ -30,6 +30,7 @@ pub enum ApiError {
 }
 
 /// Langfuse API client
+#[derive(Debug)]
 pub struct LangfuseClient {
     client: Client,
     host: String,
@@ -489,5 +490,710 @@ impl LangfuseClient {
             Ok(_) => Ok(true),
             Err(e) => Err(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::matchers::{method, path, header, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use serde_json::json;
+
+    fn create_test_config(host: &str) -> Config {
+        Config {
+            public_key: Some("pk-test-123".to_string()),
+            secret_key: Some("sk-test-456".to_string()),
+            host: host.to_string(),
+            profile: "test".to_string(),
+            format: crate::types::OutputFormat::Table,
+            limit: 50,
+            page: 1,
+            output: None,
+            verbose: false,
+            no_color: false,
+        }
+    }
+
+    // ========== Client Creation Tests ==========
+
+    #[test]
+    fn test_client_new_with_valid_config() {
+        let config = Config {
+            public_key: Some("pk-test".to_string()),
+            secret_key: Some("sk-test".to_string()),
+            host: "https://example.com".to_string(),
+            ..Default::default()
+        };
+
+        let client = LangfuseClient::new(&config);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_client_new_missing_public_key() {
+        let config = Config {
+            public_key: None,
+            secret_key: Some("sk-test".to_string()),
+            host: "https://example.com".to_string(),
+            ..Default::default()
+        };
+
+        let client = LangfuseClient::new(&config);
+        assert!(client.is_err());
+        assert!(client.unwrap_err().to_string().contains("Public key"));
+    }
+
+    #[test]
+    fn test_client_new_missing_secret_key() {
+        let config = Config {
+            public_key: Some("pk-test".to_string()),
+            secret_key: None,
+            host: "https://example.com".to_string(),
+            ..Default::default()
+        };
+
+        let client = LangfuseClient::new(&config);
+        assert!(client.is_err());
+        assert!(client.unwrap_err().to_string().contains("Secret key"));
+    }
+
+    // ========== API Error Tests ==========
+
+    #[test]
+    fn test_api_error_display() {
+        let auth_err = ApiError::AuthenticationError;
+        assert!(auth_err.to_string().contains("Authentication failed"));
+
+        let not_found = ApiError::NotFoundError("trace-123".to_string());
+        assert!(not_found.to_string().contains("trace-123"));
+
+        let rate_limit = ApiError::RateLimitError;
+        assert!(rate_limit.to_string().contains("Rate limit"));
+
+        let timeout = ApiError::TimeoutError;
+        assert!(timeout.to_string().contains("timeout"));
+
+        let api_err = ApiError::ApiError {
+            status: 500,
+            message: "Internal error".to_string(),
+        };
+        assert!(api_err.to_string().contains("500"));
+        assert!(api_err.to_string().contains("Internal error"));
+
+        let network_err = ApiError::NetworkError("Connection refused".to_string());
+        assert!(network_err.to_string().contains("Connection refused"));
+    }
+
+    // ========== Traces API Tests ==========
+
+    #[tokio::test]
+    async fn test_list_traces_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .and(query_param("limit", "50"))
+            .and(query_param("page", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "trace-1", "name": "Test Trace 1"},
+                    {"id": "trace-2", "name": "Test Trace 2"}
+                ],
+                "meta": {
+                    "page": 1,
+                    "limit": 50,
+                    "totalItems": 2,
+                    "totalPages": 1
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let traces = client
+            .list_traces(None, None, None, None, None, None, 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(traces.len(), 2);
+        assert_eq!(traces[0].id, "trace-1");
+        assert_eq!(traces[1].id, "trace-2");
+    }
+
+    #[tokio::test]
+    async fn test_list_traces_with_filters() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .and(query_param("name", "my-trace"))
+            .and(query_param("userId", "user-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{"id": "trace-1"}],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let traces = client
+            .list_traces(
+                Some("my-trace"),
+                Some("user-123"),
+                None,
+                None,
+                None,
+                None,
+                50,
+                1,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(traces.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_trace_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces/trace-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "trace-123",
+                "name": "My Trace",
+                "userId": "user-456"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let trace = client.get_trace("trace-123").await.unwrap();
+
+        assert_eq!(trace.id, "trace-123");
+        assert_eq!(trace.name, Some("My Trace".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_trace_not_found() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces/nonexistent"))
+            .respond_with(ResponseTemplate::new(404).set_body_string("Not found"))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.get_trace("nonexistent").await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("not found") || err.to_string().contains("Not found"));
+    }
+
+    // ========== Sessions API Tests ==========
+
+    #[tokio::test]
+    async fn test_list_sessions_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/sessions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "session-1", "createdAt": "2024-01-15T10:00:00Z"},
+                    {"id": "session-2", "createdAt": "2024-01-16T10:00:00Z"}
+                ],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let sessions = client.list_sessions(None, None, 50, 1).await.unwrap();
+
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0].id, "session-1");
+    }
+
+    #[tokio::test]
+    async fn test_get_session_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/sessions/session-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "session-123",
+                "createdAt": "2024-01-15T10:00:00Z",
+                "projectId": "project-456"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let session = client.get_session("session-123").await.unwrap();
+
+        assert_eq!(session.id, "session-123");
+        assert_eq!(session.project_id, Some("project-456".to_string()));
+    }
+
+    // ========== Observations API Tests ==========
+
+    #[tokio::test]
+    async fn test_list_observations_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/observations"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "obs-1", "type": "GENERATION", "name": "completion"},
+                    {"id": "obs-2", "type": "SPAN", "name": "process"}
+                ],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let observations = client
+            .list_observations(None, None, None, None, None, None, 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(observations.len(), 2);
+        assert_eq!(observations[0].r#type, Some("GENERATION".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_list_observations_with_trace_filter() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/observations"))
+            .and(query_param("traceId", "trace-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{"id": "obs-1", "traceId": "trace-123"}],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let observations = client
+            .list_observations(Some("trace-123"), None, None, None, None, None, 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].trace_id, Some("trace-123".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_observation_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/observations/obs-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "obs-123",
+                "type": "GENERATION",
+                "model": "gpt-4"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let observation = client.get_observation("obs-123").await.unwrap();
+
+        assert_eq!(observation.id, "obs-123");
+        assert_eq!(observation.model, Some("gpt-4".to_string()));
+    }
+
+    // ========== Scores API Tests ==========
+
+    #[tokio::test]
+    async fn test_list_scores_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/scores"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "score-1", "name": "accuracy", "value": 0.95},
+                    {"id": "score-2", "name": "relevance", "value": 0.88}
+                ],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let scores = client.list_scores(None, None, None, 50, 1).await.unwrap();
+
+        assert_eq!(scores.len(), 2);
+        assert_eq!(scores[0].name, Some("accuracy".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_score_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/scores/score-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "score-123",
+                "name": "accuracy",
+                "value": 0.95,
+                "source": "API"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let score = client.get_score("score-123").await.unwrap();
+
+        assert_eq!(score.id, "score-123");
+        assert_eq!(score.source, Some("API".to_string()));
+    }
+
+    // ========== Metrics API Tests ==========
+
+    #[tokio::test]
+    async fn test_query_metrics_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/metrics"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"timestamp": "2024-01-15", "count": 100},
+                    {"timestamp": "2024-01-16", "count": 150}
+                ]
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .query_metrics("traces", "count", "count", None, None, None, None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(result.data.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_query_metrics_with_dimensions() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/metrics"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"model": "gpt-4", "count": 50},
+                    {"model": "gpt-3.5", "count": 100}
+                ]
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let dimensions = vec!["model".to_string()];
+        let result = client
+            .query_metrics(
+                "observations",
+                "count",
+                "count",
+                Some(&dimensions),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.data.len(), 2);
+    }
+
+    // ========== Authentication Tests ==========
+
+    #[tokio::test]
+    async fn test_authentication_failure() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .list_traces(None, None, None, None, None, None, 50, 1)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Authentication failed"));
+    }
+
+    #[tokio::test]
+    async fn test_forbidden_error() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .list_traces(None, None, None, None, None, None, 50, 1)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Authentication failed"));
+    }
+
+    // ========== Rate Limiting Tests ==========
+
+    #[tokio::test]
+    async fn test_rate_limit_error() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .respond_with(ResponseTemplate::new(429))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .list_traces(None, None, None, None, None, None, 50, 1)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Rate limit"));
+    }
+
+    // ========== Server Error Tests ==========
+
+    #[tokio::test]
+    async fn test_server_error() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .respond_with(
+                ResponseTemplate::new(500).set_body_string("Internal Server Error"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .list_traces(None, None, None, None, None, None, 50, 1)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("500"));
+    }
+
+    // ========== Test Connection Tests ==========
+
+    #[tokio::test]
+    async fn test_connection_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .and(query_param("limit", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [],
+                "meta": {}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.test_connection().await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_connection_failure() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.test_connection().await;
+
+        assert!(result.is_err());
+    }
+
+    // ========== Pagination Tests ==========
+
+    #[tokio::test]
+    async fn test_list_traces_pagination() {
+        let mock_server = MockServer::start().await;
+
+        // First page
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .and(query_param("page", "1"))
+            .and(query_param("limit", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "trace-1"},
+                    {"id": "trace-2"}
+                ],
+                "meta": {
+                    "page": 1,
+                    "totalPages": 2
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Second page
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .and(query_param("page", "2"))
+            .and(query_param("limit", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "trace-3"}
+                ],
+                "meta": {
+                    "page": 2,
+                    "totalPages": 2
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        // Request 3 items, should fetch both pages
+        let traces = client
+            .list_traces(None, None, None, None, None, None, 3, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(traces.len(), 3);
+        assert_eq!(traces[0].id, "trace-1");
+        assert_eq!(traces[2].id, "trace-3");
+    }
+
+    #[tokio::test]
+    async fn test_list_traces_limit_truncation() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "trace-1"},
+                    {"id": "trace-2"},
+                    {"id": "trace-3"}
+                ],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        // Request only 2 items
+        let traces = client
+            .list_traces(None, None, None, None, None, None, 2, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(traces.len(), 2);
+    }
+
+    // ========== Basic Auth Header Test ==========
+
+    #[tokio::test]
+    async fn test_basic_auth_header() {
+        let mock_server = MockServer::start().await;
+
+        // Check that basic auth header is present
+        Mock::given(method("GET"))
+            .and(path("/api/public/traces"))
+            .and(header("authorization", "Basic cGstdGVzdC0xMjM6c2stdGVzdC00NTY="))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [],
+                "meta": {}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .list_traces(None, None, None, None, None, None, 50, 1)
+            .await;
+
+        assert!(result.is_ok());
     }
 }

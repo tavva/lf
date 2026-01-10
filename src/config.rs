@@ -218,3 +218,413 @@ impl Config {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use tempfile::TempDir;
+
+    // ========== Config Default Tests ==========
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+
+        assert!(config.public_key.is_none());
+        assert!(config.secret_key.is_none());
+        assert_eq!(config.host, "https://cloud.langfuse.com");
+        assert_eq!(config.profile, "default");
+        assert_eq!(config.format, OutputFormat::Table);
+        assert_eq!(config.limit, 50);
+        assert_eq!(config.page, 1);
+        assert!(config.output.is_none());
+        assert!(!config.verbose);
+        assert!(!config.no_color);
+    }
+
+    // ========== Config Validation Tests ==========
+
+    #[test]
+    fn test_config_is_valid_with_all_credentials() {
+        let config = Config {
+            public_key: Some("pk-test-123".to_string()),
+            secret_key: Some("sk-test-456".to_string()),
+            host: "https://example.com".to_string(),
+            ..Default::default()
+        };
+
+        assert!(config.is_valid());
+    }
+
+    #[test]
+    fn test_config_is_invalid_without_public_key() {
+        let config = Config {
+            public_key: None,
+            secret_key: Some("sk-test-456".to_string()),
+            host: "https://example.com".to_string(),
+            ..Default::default()
+        };
+
+        assert!(!config.is_valid());
+    }
+
+    #[test]
+    fn test_config_is_invalid_without_secret_key() {
+        let config = Config {
+            public_key: Some("pk-test-123".to_string()),
+            secret_key: None,
+            host: "https://example.com".to_string(),
+            ..Default::default()
+        };
+
+        assert!(!config.is_valid());
+    }
+
+    #[test]
+    fn test_config_is_invalid_with_empty_host() {
+        let config = Config {
+            public_key: Some("pk-test-123".to_string()),
+            secret_key: Some("sk-test-456".to_string()),
+            host: "".to_string(),
+            ..Default::default()
+        };
+
+        assert!(!config.is_valid());
+    }
+
+    // ========== Key Masking Tests ==========
+
+    #[test]
+    fn test_mask_key_short_key() {
+        assert_eq!(Config::mask_key("abc"), "***");
+        assert_eq!(Config::mask_key("12345678"), "********");
+    }
+
+    #[test]
+    fn test_mask_key_long_key() {
+        assert_eq!(Config::mask_key("pk-test-1234567890"), "pk-test-********");
+        assert_eq!(
+            Config::mask_key("sk-lf-1234567890abcdef"),
+            "sk-lf-12********"
+        );
+    }
+
+    #[test]
+    fn test_mask_key_empty() {
+        assert_eq!(Config::mask_key(""), "");
+    }
+
+    #[test]
+    fn test_mask_key_exactly_8_chars() {
+        assert_eq!(Config::mask_key("abcdefgh"), "********");
+    }
+
+    #[test]
+    fn test_mask_key_9_chars() {
+        assert_eq!(Config::mask_key("abcdefghi"), "abcdefgh********");
+    }
+
+    // ========== Profile Tests ==========
+
+    #[test]
+    fn test_profile_default() {
+        let profile = Profile::default();
+
+        assert!(profile.public_key.is_none());
+        assert!(profile.secret_key.is_none());
+        assert!(profile.host.is_none());
+    }
+
+    #[test]
+    fn test_profile_serialize() {
+        let profile = Profile {
+            public_key: Some("pk-123".to_string()),
+            secret_key: Some("sk-456".to_string()),
+            host: Some("https://custom.com".to_string()),
+        };
+
+        let yaml = serde_yaml::to_string(&profile).unwrap();
+
+        assert!(yaml.contains("public_key: pk-123"));
+        assert!(yaml.contains("secret_key: sk-456"));
+        assert!(yaml.contains("host: https://custom.com"));
+    }
+
+    #[test]
+    fn test_profile_deserialize() {
+        let yaml = r#"
+public_key: pk-test
+secret_key: sk-test
+host: https://test.langfuse.com
+"#;
+
+        let profile: Profile = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(profile.public_key, Some("pk-test".to_string()));
+        assert_eq!(profile.secret_key, Some("sk-test".to_string()));
+        assert_eq!(profile.host, Some("https://test.langfuse.com".to_string()));
+    }
+
+    // ========== ConfigFile Tests ==========
+
+    #[test]
+    fn test_config_file_default() {
+        let config_file = ConfigFile::default();
+
+        assert!(config_file.profiles.is_empty());
+    }
+
+    #[test]
+    fn test_config_file_serialize() {
+        let mut config_file = ConfigFile::default();
+        config_file.profiles.insert(
+            "default".to_string(),
+            Profile {
+                public_key: Some("pk-default".to_string()),
+                secret_key: Some("sk-default".to_string()),
+                host: None,
+            },
+        );
+        config_file.profiles.insert(
+            "production".to_string(),
+            Profile {
+                public_key: Some("pk-prod".to_string()),
+                secret_key: Some("sk-prod".to_string()),
+                host: Some("https://prod.langfuse.com".to_string()),
+            },
+        );
+
+        let yaml = serde_yaml::to_string(&config_file).unwrap();
+
+        assert!(yaml.contains("default:"));
+        assert!(yaml.contains("production:"));
+        assert!(yaml.contains("pk-default"));
+        assert!(yaml.contains("pk-prod"));
+    }
+
+    #[test]
+    fn test_config_file_deserialize() {
+        let yaml = r#"
+profiles:
+  default:
+    public_key: pk-test
+    secret_key: sk-test
+  staging:
+    public_key: pk-staging
+    secret_key: sk-staging
+    host: https://staging.langfuse.com
+"#;
+
+        let config_file: ConfigFile = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(config_file.profiles.len(), 2);
+        assert!(config_file.profiles.contains_key("default"));
+        assert!(config_file.profiles.contains_key("staging"));
+
+        let staging = config_file.profiles.get("staging").unwrap();
+        assert_eq!(staging.public_key, Some("pk-staging".to_string()));
+        assert_eq!(
+            staging.host,
+            Some("https://staging.langfuse.com".to_string())
+        );
+    }
+
+    // ========== Config Load Tests ==========
+
+    #[test]
+    fn test_config_load_with_cli_options() {
+        // CLI options should override everything
+        let config = Config::load(
+            Some("custom-profile"),
+            Some("pk-cli"),
+            Some("sk-cli"),
+            Some("https://cli.example.com"),
+            Some(OutputFormat::Json),
+            Some(100),
+            Some(5),
+            Some("/tmp/output.json"),
+            true,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(config.public_key, Some("pk-cli".to_string()));
+        assert_eq!(config.secret_key, Some("sk-cli".to_string()));
+        assert_eq!(config.host, "https://cli.example.com");
+        assert_eq!(config.profile, "custom-profile");
+        assert_eq!(config.format, OutputFormat::Json);
+        assert_eq!(config.limit, 100);
+        assert_eq!(config.page, 5);
+        assert_eq!(config.output, Some("/tmp/output.json".to_string()));
+        assert!(config.verbose);
+        assert!(config.no_color);
+    }
+
+    #[test]
+    fn test_config_load_with_defaults() {
+        // Clear environment variables that might interfere
+        env::remove_var("LANGFUSE_PUBLIC_KEY");
+        env::remove_var("LANGFUSE_SECRET_KEY");
+        env::remove_var("LANGFUSE_HOST");
+        env::remove_var("LANGFUSE_PROFILE");
+
+        let config = Config::load(
+            None, None, None, None, None, None, None, None, false, false,
+        )
+        .unwrap();
+
+        assert!(config.public_key.is_none());
+        assert!(config.secret_key.is_none());
+        assert_eq!(config.host, "https://cloud.langfuse.com");
+        assert_eq!(config.profile, "default");
+        assert_eq!(config.format, OutputFormat::Table);
+        assert_eq!(config.limit, 50);
+        assert_eq!(config.page, 1);
+    }
+
+    #[test]
+    fn test_config_load_format_options() {
+        let config_table = Config::load(
+            None, None, None, None,
+            Some(OutputFormat::Table),
+            None, None, None, false, false,
+        )
+        .unwrap();
+        assert_eq!(config_table.format, OutputFormat::Table);
+
+        let config_json = Config::load(
+            None, None, None, None,
+            Some(OutputFormat::Json),
+            None, None, None, false, false,
+        )
+        .unwrap();
+        assert_eq!(config_json.format, OutputFormat::Json);
+
+        let config_csv = Config::load(
+            None, None, None, None,
+            Some(OutputFormat::Csv),
+            None, None, None, false, false,
+        )
+        .unwrap();
+        assert_eq!(config_csv.format, OutputFormat::Csv);
+
+        let config_md = Config::load(
+            None, None, None, None,
+            Some(OutputFormat::Markdown),
+            None, None, None, false, false,
+        )
+        .unwrap();
+        assert_eq!(config_md.format, OutputFormat::Markdown);
+    }
+
+    // ========== Config File Save/Load Tests ==========
+
+    #[test]
+    fn test_save_and_load_config_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.yml");
+
+        // Create a config file
+        let mut config_file = ConfigFile::default();
+        config_file.profiles.insert(
+            "test-profile".to_string(),
+            Profile {
+                public_key: Some("pk-save-test".to_string()),
+                secret_key: Some("sk-save-test".to_string()),
+                host: Some("https://save-test.com".to_string()),
+            },
+        );
+
+        // Write it manually to the temp location
+        let parent = config_path.parent().unwrap();
+        fs::create_dir_all(parent).unwrap();
+        let contents = serde_yaml::to_string(&config_file).unwrap();
+        fs::write(&config_path, contents).unwrap();
+
+        // Read it back
+        let read_contents = fs::read_to_string(&config_path).unwrap();
+        let loaded: ConfigFile = serde_yaml::from_str(&read_contents).unwrap();
+
+        assert_eq!(loaded.profiles.len(), 1);
+        let profile = loaded.profiles.get("test-profile").unwrap();
+        assert_eq!(profile.public_key, Some("pk-save-test".to_string()));
+        assert_eq!(profile.secret_key, Some("sk-save-test".to_string()));
+        assert_eq!(profile.host, Some("https://save-test.com".to_string()));
+    }
+
+    // ========== Config Path Tests ==========
+
+    #[test]
+    fn test_config_path_returns_some() {
+        // This should always return Some on systems with home directories
+        let path = Config::config_path();
+        // On most systems this will be Some, but we handle both cases
+        if let Some(p) = path {
+            assert!(p.to_string_lossy().contains("langfuse"));
+            assert!(p.to_string_lossy().ends_with("config.yml"));
+        }
+    }
+
+    // ========== Edge Cases ==========
+
+    #[test]
+    fn test_config_with_unicode_values() {
+        let config = Config::load(
+            Some("профиль"),
+            Some("pk-测试"),
+            Some("sk-テスト"),
+            Some("https://example.com/путь"),
+            None,
+            None,
+            None,
+            Some("/tmp/出力.json"),
+            false,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(config.profile, "профиль");
+        assert_eq!(config.public_key, Some("pk-测试".to_string()));
+        assert_eq!(config.secret_key, Some("sk-テスト".to_string()));
+        assert_eq!(config.output, Some("/tmp/出力.json".to_string()));
+    }
+
+    #[test]
+    fn test_mask_key_unicode() {
+        // Unicode characters should be handled properly
+        assert_eq!(Config::mask_key("🔑🔑🔑"), "***");
+        // Note: Unicode characters may have multi-byte representations
+        let key = "pk-日本語テスト";
+        let masked = Config::mask_key(key);
+        // The masking is byte-based, so we check it doesn't panic
+        assert!(!masked.is_empty());
+    }
+
+    #[test]
+    fn test_config_file_empty_profiles() {
+        let yaml = "profiles: {}";
+        let config_file: ConfigFile = serde_yaml::from_str(yaml).unwrap();
+        assert!(config_file.profiles.is_empty());
+    }
+
+    #[test]
+    fn test_config_file_missing_profiles_key() {
+        let yaml = "other_key: value";
+        let config_file: ConfigFile = serde_yaml::from_str(yaml).unwrap();
+        assert!(config_file.profiles.is_empty());
+    }
+
+    #[test]
+    fn test_profile_partial_fields() {
+        let yaml = r#"
+public_key: only-public-key
+"#;
+
+        let profile: Profile = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(profile.public_key, Some("only-public-key".to_string()));
+        assert!(profile.secret_key.is_none());
+        assert!(profile.host.is_none());
+    }
+}
