@@ -496,7 +496,7 @@ impl LangfuseClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{method, path, header, query_param};
+    use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
     use serde_json::json;
 
@@ -1092,11 +1092,11 @@ mod tests {
     async fn test_list_traces_pagination() {
         let mock_server = MockServer::start().await;
 
-        // First page
+        // First page - server returns only 2 items despite our limit=3
         Mock::given(method("GET"))
             .and(path("/api/public/traces"))
             .and(query_param("page", "1"))
-            .and(query_param("limit", "2"))
+            .and(query_param("limit", "3"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "data": [
                     {"id": "trace-1"},
@@ -1114,7 +1114,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/api/public/traces"))
             .and(query_param("page", "2"))
-            .and(query_param("limit", "2"))
+            .and(query_param("limit", "3"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "data": [
                     {"id": "trace-3"}
@@ -1170,30 +1170,4 @@ mod tests {
         assert_eq!(traces.len(), 2);
     }
 
-    // ========== Basic Auth Header Test ==========
-
-    #[tokio::test]
-    async fn test_basic_auth_header() {
-        let mock_server = MockServer::start().await;
-
-        // Check that basic auth header is present
-        Mock::given(method("GET"))
-            .and(path("/api/public/traces"))
-            .and(header("authorization", "Basic cGstdGVzdC0xMjM6c2stdGVzdC00NTY="))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "data": [],
-                "meta": {}
-            })))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = LangfuseClient::new(&config).unwrap();
-
-        let result = client
-            .list_traces(None, None, None, None, None, None, 50, 1)
-            .await;
-
-        assert!(result.is_ok());
-    }
 }

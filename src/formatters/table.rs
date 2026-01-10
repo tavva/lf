@@ -34,6 +34,11 @@ impl TableFormatter {
             }
         }
 
+        // No object keys found - can't display as table
+        if headers.is_empty() {
+            return Ok("No data to display".to_string());
+        }
+
         let headers_vec: Vec<String> = headers.into_iter().collect();
 
         let mut builder = Builder::default();
@@ -304,8 +309,8 @@ mod tests {
     fn test_format_array_with_non_objects() {
         let data = vec![json!("string1"), json!("string2")];
         let result = TableFormatter::format(&data).unwrap();
-        // Non-objects should result in empty cells but not error
-        assert!(result.contains("No data to display") || result.len() > 0);
+        // Non-objects can't be displayed as a table
+        assert_eq!(result, "No data to display");
     }
 
     #[test]

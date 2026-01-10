@@ -211,10 +211,12 @@ impl Config {
 
     /// Mask a key for display (show first 8 chars + asterisks)
     pub fn mask_key(key: &str) -> String {
-        if key.len() <= 8 {
-            "*".repeat(key.len())
+        let char_count = key.chars().count();
+        if char_count <= 8 {
+            "*".repeat(char_count)
         } else {
-            format!("{}********", &key[..8])
+            let prefix: String = key.chars().take(8).collect();
+            format!("{}********", prefix)
         }
     }
 }
@@ -627,4 +629,5 @@ public_key: only-public-key
         assert!(profile.secret_key.is_none());
         assert!(profile.host.is_none());
     }
+
 }
