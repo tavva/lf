@@ -2,6 +2,8 @@
 
 Unofficial command-line interface for [Langfuse](https://langfuse.com).
 
+Originally a port of [lf-cli](https://github.com/vicentereig/lf-cli) to Rust.
+
 ## Quick Start
 
 ```bash
