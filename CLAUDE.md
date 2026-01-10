@@ -37,7 +37,7 @@ src/
 ```
 lf config {setup,set,show,list}
 lf traces {list,get}
-lf sessions {list,get}
+lf sessions {list,show}
 lf observations {list,get}
 lf scores {list,get}
 lf metrics query
