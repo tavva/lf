@@ -248,6 +248,60 @@ pub struct PaginationMeta {
     pub total_pages: Option<i32>,
 }
 
+/// A chat message for chat prompts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// Prompt content - either text or chat messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PromptContent {
+    Text(String),
+    Chat(Vec<ChatMessage>),
+}
+
+/// A prompt from Langfuse
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prompt {
+    pub name: String,
+    pub version: i32,
+    #[serde(rename = "type")]
+    pub prompt_type: String,
+    pub prompt: PromptContent,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub config: Option<serde_json::Value>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// Prompt metadata from list endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptMeta {
+    pub name: String,
+    #[serde(default)]
+    pub versions: Vec<i32>,
+    #[serde(default)]
+    pub labels: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub last_updated_at: Option<String>,
+}
+
+/// API response wrapper for prompts list
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptsResponse {
+    pub data: Vec<PromptMeta>,
+    pub meta: Option<PaginationMeta>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,5 +816,112 @@ mod tests {
         assert!(meta.limit.is_none());
         assert!(meta.total_items.is_none());
         assert!(meta.total_pages.is_none());
+    }
+
+    // ========== Prompt Tests ==========
+
+    #[test]
+    fn test_chat_message_deserialize() {
+        let json = json!({
+            "role": "system",
+            "content": "You are a helpful assistant."
+        });
+
+        let msg: ChatMessage = serde_json::from_value(json).unwrap();
+
+        assert_eq!(msg.role, "system");
+        assert_eq!(msg.content, "You are a helpful assistant.");
+    }
+
+    #[test]
+    fn test_prompt_text_deserialize() {
+        let json = json!({
+            "name": "welcome",
+            "version": 3,
+            "type": "text",
+            "prompt": "Hello {{name}}!",
+            "labels": ["production"],
+            "tags": ["greeting"],
+            "config": {"temperature": 0.7},
+            "createdAt": "2024-01-15T10:00:00Z",
+            "updatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let prompt: Prompt = serde_json::from_value(json).unwrap();
+
+        assert_eq!(prompt.name, "welcome");
+        assert_eq!(prompt.version, 3);
+        assert_eq!(prompt.prompt_type, "text");
+        assert_eq!(prompt.labels, vec!["production"]);
+        match prompt.prompt {
+            PromptContent::Text(s) => assert_eq!(s, "Hello {{name}}!"),
+            _ => panic!("Expected text prompt"),
+        }
+    }
+
+    #[test]
+    fn test_prompt_chat_deserialize() {
+        let json = json!({
+            "name": "assistant",
+            "version": 1,
+            "type": "chat",
+            "prompt": [
+                {"role": "system", "content": "You are helpful."},
+                {"role": "user", "content": "{{question}}"}
+            ],
+            "labels": [],
+            "tags": [],
+            "createdAt": "2024-01-15T10:00:00Z",
+            "updatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let prompt: Prompt = serde_json::from_value(json).unwrap();
+
+        assert_eq!(prompt.prompt_type, "chat");
+        match prompt.prompt {
+            PromptContent::Chat(msgs) => {
+                assert_eq!(msgs.len(), 2);
+                assert_eq!(msgs[0].role, "system");
+            }
+            _ => panic!("Expected chat prompt"),
+        }
+    }
+
+    #[test]
+    fn test_prompt_meta_deserialize() {
+        let json = json!({
+            "name": "welcome",
+            "versions": [1, 2, 3],
+            "labels": ["production", "staging"],
+            "tags": ["greeting"],
+            "lastUpdatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let meta: PromptMeta = serde_json::from_value(json).unwrap();
+
+        assert_eq!(meta.name, "welcome");
+        assert_eq!(meta.versions, vec![1, 2, 3]);
+        assert_eq!(meta.labels, vec!["production", "staging"]);
+    }
+
+    #[test]
+    fn test_prompts_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"name": "p1", "versions": [1], "labels": [], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"},
+                {"name": "p2", "versions": [1, 2], "labels": ["prod"], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"}
+            ],
+            "meta": {
+                "page": 1,
+                "limit": 50,
+                "totalItems": 2,
+                "totalPages": 1
+            }
+        });
+
+        let response: PromptsResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+        assert_eq!(response.data[0].name, "p1");
     }
 }
