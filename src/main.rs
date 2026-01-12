@@ -10,6 +10,7 @@ mod types;
 use commands::config::ConfigCommands;
 use commands::metrics::MetricsCommands;
 use commands::observations::ObservationsCommands;
+use commands::prompts::PromptsCommands;
 use commands::scores::ScoresCommands;
 use commands::sessions::SessionsCommands;
 use commands::traces::TracesCommands;
@@ -51,6 +52,10 @@ enum Commands {
     /// Query metrics with aggregations
     #[command(subcommand)]
     Metrics(MetricsCommands),
+
+    /// Manage prompts
+    #[command(subcommand)]
+    Prompts(PromptsCommands),
 }
 
 #[tokio::main]
@@ -67,5 +72,6 @@ async fn main() -> Result<()> {
         Commands::Observations(cmd) => cmd.execute().await,
         Commands::Scores(cmd) => cmd.execute().await,
         Commands::Metrics(cmd) => cmd.execute().await,
+        Commands::Prompts(cmd) => cmd.execute().await,
     }
 }

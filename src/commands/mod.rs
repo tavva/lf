@@ -1,6 +1,7 @@
 pub mod config;
 pub mod metrics;
 pub mod observations;
+pub mod prompts;
 pub mod scores;
 pub mod sessions;
 pub mod traces;
