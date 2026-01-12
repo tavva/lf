@@ -115,6 +115,56 @@ impl LangfuseClient {
         }
     }
 
+    /// Make an authenticated GET request to v2 API
+    async fn get_v2<T: DeserializeOwned>(&self, path: &str, params: &[(&str, &str)]) -> Result<T> {
+        let url = format!("{}/api/public/v2{}", self.host, path);
+
+        let mut request = self
+            .client
+            .get(&url)
+            .basic_auth(&self.public_key, Some(&self.secret_key));
+
+        if !params.is_empty() {
+            request = request.query(params);
+        }
+
+        let response = request.send().await.map_err(|e| {
+            if e.is_timeout() {
+                ApiError::TimeoutError
+            } else {
+                ApiError::NetworkError(e.to_string())
+            }
+        })?;
+
+        let status = response.status();
+
+        match status {
+            StatusCode::OK => {
+                let body = response
+                    .json::<T>()
+                    .await
+                    .context("Failed to parse response")?;
+                Ok(body)
+            }
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                Err(ApiError::AuthenticationError.into())
+            }
+            StatusCode::NOT_FOUND => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::NotFoundError(message).into())
+            }
+            StatusCode::TOO_MANY_REQUESTS => Err(ApiError::RateLimitError.into()),
+            _ => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                }
+                .into())
+            }
+        }
+    }
+
     /// Make an authenticated POST request
     async fn post<T: DeserializeOwned, B: serde::Serialize>(
         &self,
@@ -497,6 +547,85 @@ impl LangfuseClient {
             Ok(_) => Ok(true),
             Err(e) => Err(e),
         }
+    }
+
+    // ========== Prompts API ==========
+
+    /// List prompts with optional filters
+    pub async fn list_prompts(
+        &self,
+        name: Option<&str>,
+        label: Option<&str>,
+        tag: Option<&str>,
+        limit: u32,
+        page: u32,
+    ) -> Result<Vec<PromptMeta>> {
+        let mut all_prompts = Vec::new();
+        let mut current_page = page;
+        let page_size = std::cmp::min(limit, 100);
+
+        loop {
+            let mut params: Vec<(&str, String)> = vec![
+                ("limit", page_size.to_string()),
+                ("page", current_page.to_string()),
+            ];
+
+            if let Some(n) = name {
+                params.push(("name", n.to_string()));
+            }
+            if let Some(l) = label {
+                params.push(("label", l.to_string()));
+            }
+            if let Some(t) = tag {
+                params.push(("tag", t.to_string()));
+            }
+
+            let params_refs: Vec<(&str, &str)> =
+                params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+            let response: PromptsResponse = self.get_v2("/prompts", &params_refs).await?;
+
+            all_prompts.extend(response.data);
+
+            if all_prompts.len() >= limit as usize {
+                all_prompts.truncate(limit as usize);
+                break;
+            }
+
+            if let Some(meta) = &response.meta {
+                if let Some(total_pages) = meta.total_pages {
+                    if current_page >= total_pages as u32 {
+                        break;
+                    }
+                }
+            }
+
+            current_page += 1;
+        }
+
+        Ok(all_prompts)
+    }
+
+    /// Get a specific prompt by name
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        version: Option<i32>,
+        label: Option<&str>,
+    ) -> Result<Prompt> {
+        let mut params: Vec<(&str, String)> = vec![];
+
+        if let Some(v) = version {
+            params.push(("version", v.to_string()));
+        }
+        if let Some(l) = label {
+            params.push(("label", l.to_string()));
+        }
+
+        let params_refs: Vec<(&str, &str)> =
+            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        self.get_v2(&format!("/prompts/{}", name), &params_refs).await
     }
 }
 
@@ -1089,6 +1218,127 @@ mod tests {
         let result = client.test_connection().await;
 
         assert!(result.is_err());
+    }
+
+    // ========== Prompts API Tests ==========
+
+    #[tokio::test]
+    async fn test_list_prompts_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts"))
+            .and(query_param("limit", "50"))
+            .and(query_param("page", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"name": "prompt-1", "versions": [1, 2], "labels": ["production"], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"},
+                    {"name": "prompt-2", "versions": [1], "labels": [], "tags": ["test"], "lastUpdatedAt": "2024-01-15T10:00:00Z"}
+                ],
+                "meta": {
+                    "page": 1,
+                    "limit": 50,
+                    "totalItems": 2,
+                    "totalPages": 1
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompts = client
+            .list_prompts(None, None, None, 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(prompts.len(), 2);
+        assert_eq!(prompts[0].name, "prompt-1");
+        assert_eq!(prompts[0].versions, vec![1, 2]);
+    }
+
+    #[tokio::test]
+    async fn test_list_prompts_with_filters() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts"))
+            .and(query_param("name", "welcome"))
+            .and(query_param("label", "production"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{"name": "welcome", "versions": [1], "labels": ["production"], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"}],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompts = client
+            .list_prompts(Some("welcome"), Some("production"), None, 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(prompts.len(), 1);
+        assert_eq!(prompts[0].name, "welcome");
+    }
+
+    #[tokio::test]
+    async fn test_get_prompt_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts/welcome"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "welcome",
+                "version": 2,
+                "type": "text",
+                "prompt": "Hello {{name}}!",
+                "labels": ["production"],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client.get_prompt("welcome", None, None).await.unwrap();
+
+        assert_eq!(prompt.name, "welcome");
+        assert_eq!(prompt.version, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_prompt_with_version() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts/welcome"))
+            .and(query_param("version", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "welcome",
+                "version": 1,
+                "type": "text",
+                "prompt": "Hi {{name}}!",
+                "labels": [],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client.get_prompt("welcome", Some(1), None).await.unwrap();
+
+        assert_eq!(prompt.version, 1);
     }
 
     // ========== Pagination Tests ==========
