@@ -218,7 +218,18 @@ mod tests {
 
     #[test]
     fn test_format_value_array_long() {
-        let value = json!(["this", "is", "a", "very", "long", "array", "that", "should", "be", "truncated"]);
+        let value = json!([
+            "this",
+            "is",
+            "a",
+            "very",
+            "long",
+            "array",
+            "that",
+            "should",
+            "be",
+            "truncated"
+        ]);
         let result = TableFormatter::format_value(Some(&value));
         assert!(result.ends_with("..."));
         assert!(result.len() <= 53); // 50 + "..."

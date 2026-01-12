@@ -206,16 +206,7 @@ impl TracesCommands {
                 // Fetch observations if requested
                 if *with_observations {
                     let observations = client
-                        .list_observations(
-                            Some(id),
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            100,
-                            1,
-                        )
+                        .list_observations(Some(id), None, None, None, None, None, 100, 1)
                         .await?;
                     trace.observations = observations
                         .into_iter()

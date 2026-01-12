@@ -1,9 +1,9 @@
 pub mod config;
-pub mod traces;
-pub mod sessions;
+pub mod metrics;
 pub mod observations;
 pub mod scores;
-pub mod metrics;
+pub mod sessions;
+pub mod traces;
 
 use anyhow::Result;
 use std::fs;
@@ -17,10 +17,10 @@ pub fn output_result(content: &str, output_path: Option<&str>, verbose: bool) ->
     if let Some(path) = output_path {
         fs::write(path, content)?;
         if verbose {
-            eprintln!("Output written to: {}", path);
+            eprintln!("Output written to: {path}");
         }
     } else {
-        println!("{}", content);
+        println!("{content}");
     }
     Ok(())
 }
@@ -37,6 +37,7 @@ pub fn format_and_output<T: serde::Serialize>(
 }
 
 /// Helper to build config from CLI args
+#[allow(clippy::too_many_arguments)]
 pub fn build_config(
     profile: Option<&str>,
     public_key: Option<&str>,

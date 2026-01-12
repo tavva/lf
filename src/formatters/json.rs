@@ -28,10 +28,7 @@ mod tests {
 
     #[test]
     fn test_format_array() {
-        let data = vec![
-            json!({"id": "1"}),
-            json!({"id": "2"}),
-        ];
+        let data = vec![json!({"id": "1"}), json!({"id": "2"})];
         let result = JsonFormatter::format(&data).unwrap();
 
         assert!(result.contains("["));

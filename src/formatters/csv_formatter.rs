@@ -226,9 +226,7 @@ mod tests {
 
     #[test]
     fn test_csv_header_order() {
-        let data = vec![
-            json!({"zebra": "z", "alpha": "a", "middle": "m"}),
-        ];
+        let data = vec![json!({"zebra": "z", "alpha": "a", "middle": "m"})];
         let result = CsvFormatter::format(&data).unwrap();
 
         let lines: Vec<&str> = result.lines().collect();
@@ -330,7 +328,7 @@ mod tests {
         let data = vec![json!("string1"), json!("string2")];
         let result = CsvFormatter::format(&data).unwrap();
         // Should handle gracefully without error
-        assert!(result.len() > 0);
+        assert!(!result.is_empty());
     }
 
     #[test]
@@ -342,6 +340,9 @@ mod tests {
         let result = CsvFormatter::format(&data).unwrap();
 
         // Nested object should be serialized as JSON string
-        assert!(result.contains("{\"key\":\"value\"}") || result.contains("{\"\"key\"\":\"\"value\"\"}"));
+        assert!(
+            result.contains("{\"key\":\"value\"}")
+                || result.contains("{\"\"key\"\":\"\"value\"\"}")
+        );
     }
 }

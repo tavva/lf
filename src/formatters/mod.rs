@@ -1,12 +1,12 @@
-mod table;
 mod csv_formatter;
-mod markdown;
 mod json;
+mod markdown;
+mod table;
 
-pub use table::TableFormatter;
 pub use csv_formatter::CsvFormatter;
-pub use markdown::MarkdownFormatter;
 pub use json::JsonFormatter;
+pub use markdown::MarkdownFormatter;
+pub use table::TableFormatter;
 
 use anyhow::Result;
 use serde::Serialize;
@@ -91,10 +91,7 @@ mod tests {
 
     #[test]
     fn test_format_output_array() {
-        let data = vec![
-            json!({"id": "1"}),
-            json!({"id": "2"}),
-        ];
+        let data = vec![json!({"id": "1"}), json!({"id": "2"})];
 
         let table = format_output(&data, OutputFormat::Table).unwrap();
         let csv = format_output(&data, OutputFormat::Csv).unwrap();

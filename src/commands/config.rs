@@ -59,7 +59,10 @@ impl ConfigCommands {
                 public_key,
                 secret_key,
                 host,
-            } => self.set_config(profile, public_key, secret_key, host.as_deref()).await,
+            } => {
+                self.set_config(profile, public_key, secret_key, host.as_deref())
+                    .await
+            }
             ConfigCommands::Show { profile } => self.show_config(profile),
             ConfigCommands::List => self.list_profiles(),
         }
@@ -74,13 +77,9 @@ impl ConfigCommands {
             .default("default".to_string())
             .interact_text()?;
 
-        let public_key: String = Input::new()
-            .with_prompt("Public key")
-            .interact_text()?;
+        let public_key: String = Input::new().with_prompt("Public key").interact_text()?;
 
-        let secret_key: String = Password::new()
-            .with_prompt("Secret key")
-            .interact()?;
+        let secret_key: String = Password::new().with_prompt("Secret key").interact()?;
 
         let host: String = Input::new()
             .with_prompt("Host URL")
@@ -109,22 +108,22 @@ impl ConfigCommands {
 
                 // Save configuration
                 Config::set_profile(&profile, &public_key, &secret_key, Some(&host))?;
-                println!("\nConfiguration saved to profile '{}'", profile);
+                println!("\nConfiguration saved to profile '{profile}'");
 
                 if let Some(path) = Config::config_path() {
-                    println!("Config file: {:?}", path);
+                    println!("Config file: {path:?}");
                 }
 
                 if profile != "default" {
                     println!("\nTo use this profile, either:");
-                    println!("  lf traces list --profile {}", profile);
-                    println!("  export LANGFUSE_PROFILE={}", profile);
+                    println!("  lf traces list --profile {profile}");
+                    println!("  export LANGFUSE_PROFILE={profile}");
                 }
 
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Connection failed: {}", e);
+                eprintln!("Connection failed: {e}");
                 Err(e)
             }
         }
@@ -161,18 +160,18 @@ impl ConfigCommands {
 
                 // Save configuration
                 Config::set_profile(&profile, &public_key, &secret_key, Some(&host))?;
-                eprintln!("Configuration saved to profile '{}'", profile);
+                eprintln!("Configuration saved to profile '{profile}'");
 
                 if profile != "default" {
                     eprintln!("\nTo use this profile, either:");
-                    eprintln!("  lf traces list --profile {}", profile);
-                    eprintln!("  export LANGFUSE_PROFILE={}", profile);
+                    eprintln!("  lf traces list --profile {profile}");
+                    eprintln!("  export LANGFUSE_PROFILE={profile}");
                 }
 
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Connection failed: {}", e);
+                eprintln!("Connection failed: {e}");
                 Err(e)
             }
         }
@@ -203,16 +202,16 @@ impl ConfigCommands {
         match client.test_connection().await {
             Ok(_) => {
                 Config::set_profile(profile, public_key, secret_key, host)?;
-                println!("Configuration saved to profile '{}'", profile);
+                println!("Configuration saved to profile '{profile}'");
                 if profile != "default" {
                     println!("\nTo use this profile, either:");
-                    println!("  lf traces list --profile {}", profile);
-                    println!("  export LANGFUSE_PROFILE={}", profile);
+                    println!("  lf traces list --profile {profile}");
+                    println!("  export LANGFUSE_PROFILE={profile}");
                 }
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Connection test failed: {}", e);
+                eprintln!("Connection test failed: {e}");
                 Err(e)
             }
         }
@@ -221,7 +220,7 @@ impl ConfigCommands {
     fn show_config(&self, profile_name: &str) -> Result<()> {
         match Config::get_profile(profile_name)? {
             Some(profile) => {
-                println!("Profile: {}", profile_name);
+                println!("Profile: {profile_name}");
                 println!("─────────────────────────────────");
 
                 if let Some(pk) = &profile.public_key {
@@ -237,7 +236,7 @@ impl ConfigCommands {
                 }
 
                 if let Some(host) = &profile.host {
-                    println!("Host: {}", host);
+                    println!("Host: {host}");
                 } else {
                     println!("Host: (default: https://cloud.langfuse.com)");
                 }
@@ -245,7 +244,7 @@ impl ConfigCommands {
                 Ok(())
             }
             None => {
-                eprintln!("Profile '{}' not found", profile_name);
+                eprintln!("Profile '{profile_name}' not found");
                 std::process::exit(1);
             }
         }
@@ -261,7 +260,7 @@ impl ConfigCommands {
             println!("Configured profiles:");
             println!("─────────────────────");
             for profile in profiles {
-                println!("  - {}", profile);
+                println!("  - {profile}");
             }
         }
 

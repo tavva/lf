@@ -177,16 +177,7 @@ impl SessionsCommands {
                 // Fetch traces if requested
                 if *with_traces {
                     let traces = client
-                        .list_traces(
-                            None,
-                            None,
-                            Some(id),
-                            None,
-                            None,
-                            None,
-                            100,
-                            1,
-                        )
+                        .list_traces(None, None, Some(id), None, None, None, 100, 1)
                         .await?;
                     session.traces = traces;
                 }

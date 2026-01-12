@@ -28,6 +28,7 @@ pub struct ConfigFile {
 
 /// Runtime configuration with resolved values
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Config {
     pub public_key: Option<String>,
     pub secret_key: Option<String>,
@@ -77,7 +78,7 @@ impl Config {
         if let Some(path) = path {
             if path.exists() {
                 let contents = fs::read_to_string(&path)
-                    .with_context(|| format!("Failed to read config file: {:?}", path))?;
+                    .with_context(|| format!("Failed to read config file: {path:?}"))?;
                 let config: ConfigFile = serde_yaml::from_str(&contents)
                     .with_context(|| "Failed to parse config file")?;
                 return Ok(config);
@@ -95,14 +96,14 @@ impl Config {
         // Create directory if it doesn't exist
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
+                .with_context(|| format!("Failed to create config directory: {parent:?}"))?;
         }
 
-        let contents = serde_yaml::to_string(config_file)
-            .with_context(|| "Failed to serialize config")?;
+        let contents =
+            serde_yaml::to_string(config_file).with_context(|| "Failed to serialize config")?;
 
         fs::write(&path, contents)
-            .with_context(|| format!("Failed to write config file: {:?}", path))?;
+            .with_context(|| format!("Failed to write config file: {path:?}"))?;
 
         // Set restrictive permissions on Unix systems
         #[cfg(unix)]
@@ -117,6 +118,7 @@ impl Config {
     }
 
     /// Load configuration with priority: CLI options > env vars > config file > defaults
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         profile: Option<&str>,
         public_key: Option<&str>,
@@ -216,7 +218,7 @@ impl Config {
             "*".repeat(char_count)
         } else {
             let prefix: String = key.chars().take(8).collect();
-            format!("{}********", prefix)
+            format!("{prefix}********")
         }
     }
 }
@@ -471,10 +473,8 @@ profiles:
         env::remove_var("LANGFUSE_HOST");
         env::remove_var("LANGFUSE_PROFILE");
 
-        let config = Config::load(
-            None, None, None, None, None, None, None, None, false, false,
-        )
-        .unwrap();
+        let config =
+            Config::load(None, None, None, None, None, None, None, None, false, false).unwrap();
 
         assert!(config.public_key.is_none());
         assert!(config.secret_key.is_none());
@@ -488,33 +488,61 @@ profiles:
     #[test]
     fn test_config_load_format_options() {
         let config_table = Config::load(
-            None, None, None, None,
+            None,
+            None,
+            None,
+            None,
             Some(OutputFormat::Table),
-            None, None, None, false, false,
+            None,
+            None,
+            None,
+            false,
+            false,
         )
         .unwrap();
         assert_eq!(config_table.format, OutputFormat::Table);
 
         let config_json = Config::load(
-            None, None, None, None,
+            None,
+            None,
+            None,
+            None,
             Some(OutputFormat::Json),
-            None, None, None, false, false,
+            None,
+            None,
+            None,
+            false,
+            false,
         )
         .unwrap();
         assert_eq!(config_json.format, OutputFormat::Json);
 
         let config_csv = Config::load(
-            None, None, None, None,
+            None,
+            None,
+            None,
+            None,
             Some(OutputFormat::Csv),
-            None, None, None, false, false,
+            None,
+            None,
+            None,
+            false,
+            false,
         )
         .unwrap();
         assert_eq!(config_csv.format, OutputFormat::Csv);
 
         let config_md = Config::load(
-            None, None, None, None,
+            None,
+            None,
+            None,
+            None,
             Some(OutputFormat::Markdown),
-            None, None, None, false, false,
+            None,
+            None,
+            None,
+            false,
+            false,
         )
         .unwrap();
         assert_eq!(config_md.format, OutputFormat::Markdown);
@@ -629,5 +657,4 @@ public_key: only-public-key
         assert!(profile.secret_key.is_none());
         assert!(profile.host.is_none());
     }
-
 }

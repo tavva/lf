@@ -9,6 +9,7 @@ use crate::types::*;
 
 /// API errors
 #[derive(Error, Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum ApiError {
     #[error("Authentication failed. Check your public and secret keys.")]
     AuthenticationError,
@@ -68,7 +69,10 @@ impl LangfuseClient {
     async fn get<T: DeserializeOwned>(&self, path: &str, params: &[(&str, &str)]) -> Result<T> {
         let url = format!("{}/api/public{}", self.host, path);
 
-        let mut request = self.client.get(&url).basic_auth(&self.public_key, Some(&self.secret_key));
+        let mut request = self
+            .client
+            .get(&url)
+            .basic_auth(&self.public_key, Some(&self.secret_key));
 
         if !params.is_empty() {
             request = request.query(params);
@@ -166,6 +170,7 @@ impl LangfuseClient {
     // ========== Traces API ==========
 
     /// List traces with optional filters
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_traces(
         &self,
         name: Option<&str>,
@@ -236,7 +241,7 @@ impl LangfuseClient {
 
     /// Get a single trace by ID
     pub async fn get_trace(&self, id: &str) -> Result<Trace> {
-        self.get(&format!("/traces/{}", id), &[]).await
+        self.get(&format!("/traces/{id}"), &[]).await
     }
 
     // ========== Sessions API ==========
@@ -294,12 +299,13 @@ impl LangfuseClient {
 
     /// Get a single session by ID
     pub async fn get_session(&self, id: &str) -> Result<Session> {
-        self.get(&format!("/sessions/{}", id), &[]).await
+        self.get(&format!("/sessions/{id}"), &[]).await
     }
 
     // ========== Observations API ==========
 
     /// List observations with optional filters
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_observations(
         &self,
         trace_id: Option<&str>,
@@ -368,7 +374,7 @@ impl LangfuseClient {
 
     /// Get a single observation by ID
     pub async fn get_observation(&self, id: &str) -> Result<Observation> {
-        self.get(&format!("/observations/{}", id), &[]).await
+        self.get(&format!("/observations/{id}"), &[]).await
     }
 
     // ========== Scores API ==========
@@ -430,12 +436,13 @@ impl LangfuseClient {
 
     /// Get a single score by ID
     pub async fn get_score(&self, id: &str) -> Result<Score> {
-        self.get(&format!("/scores/{}", id), &[]).await
+        self.get(&format!("/scores/{id}"), &[]).await
     }
 
     // ========== Metrics API ==========
 
     /// Query metrics
+    #[allow(clippy::too_many_arguments)]
     pub async fn query_metrics(
         &self,
         view: &str,
@@ -496,9 +503,9 @@ impl LangfuseClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-    use serde_json::json;
 
     fn create_test_config(host: &str) -> Config {
         Config {
@@ -1026,9 +1033,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/api/public/traces"))
-            .respond_with(
-                ResponseTemplate::new(500).set_body_string("Internal Server Error"),
-            )
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
             .mount(&mock_server)
             .await;
 
@@ -1169,5 +1174,4 @@ mod tests {
 
         assert_eq!(traces.len(), 2);
     }
-
 }

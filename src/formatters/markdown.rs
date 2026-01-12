@@ -40,7 +40,7 @@ impl MarkdownFormatter {
         // Header row
         output.push('|');
         for header in &headers_vec {
-            output.push_str(&format!(" {} |", header));
+            output.push_str(&format!(" {header} |"));
         }
         output.push('\n');
 
@@ -207,7 +207,10 @@ mod tests {
 
     #[test]
     fn test_escape_pipes_no_pipes() {
-        assert_eq!(MarkdownFormatter::escape_pipes("hello world"), "hello world");
+        assert_eq!(
+            MarkdownFormatter::escape_pipes("hello world"),
+            "hello world"
+        );
     }
 
     #[test]
@@ -234,9 +237,7 @@ mod tests {
 
     #[test]
     fn test_markdown_table_structure() {
-        let data = vec![
-            json!({"col1": "a", "col2": "b"}),
-        ];
+        let data = vec![json!({"col1": "a", "col2": "b"})];
         let result = MarkdownFormatter::format(&data).unwrap();
 
         let lines: Vec<&str> = result.lines().collect();
@@ -257,9 +258,7 @@ mod tests {
 
     #[test]
     fn test_markdown_column_count() {
-        let data = vec![
-            json!({"a": "1", "b": "2", "c": "3"}),
-        ];
+        let data = vec![json!({"a": "1", "b": "2", "c": "3"})];
         let result = MarkdownFormatter::format(&data).unwrap();
 
         let lines: Vec<&str> = result.lines().collect();
@@ -324,9 +323,7 @@ mod tests {
 
     #[test]
     fn test_markdown_header_order() {
-        let data = vec![
-            json!({"zebra": "z", "alpha": "a", "middle": "m"}),
-        ];
+        let data = vec![json!({"zebra": "z", "alpha": "a", "middle": "m"})];
         let result = MarkdownFormatter::format(&data).unwrap();
 
         let lines: Vec<&str> = result.lines().collect();
@@ -356,10 +353,7 @@ mod tests {
 
     #[test]
     fn test_markdown_single_column() {
-        let data = vec![
-            json!({"only": "one"}),
-            json!({"only": "two"}),
-        ];
+        let data = vec![json!({"only": "one"}), json!({"only": "two"})];
         let result = MarkdownFormatter::format(&data).unwrap();
 
         let lines: Vec<&str> = result.lines().collect();

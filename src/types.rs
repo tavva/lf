@@ -424,7 +424,10 @@ mod tests {
         assert_eq!(trace.user_id, Some("user-456".to_string()));
         assert_eq!(trace.session_id, Some("session-789".to_string()));
         assert_eq!(trace.release, Some("v1.0.0".to_string()));
-        assert_eq!(trace.tags, Some(vec!["tag1".to_string(), "tag2".to_string()]));
+        assert_eq!(
+            trace.tags,
+            Some(vec!["tag1".to_string(), "tag2".to_string()])
+        );
         assert!(trace.observations.is_empty());
     }
 
