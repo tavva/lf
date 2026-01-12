@@ -165,6 +165,154 @@ impl LangfuseClient {
         }
     }
 
+    /// Make an authenticated POST request to v2 API
+    async fn post_v2<T: DeserializeOwned, B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T> {
+        let url = format!("{}/api/public/v2{}", self.host, path);
+
+        let response = self
+            .client
+            .post(&url)
+            .basic_auth(&self.public_key, Some(&self.secret_key))
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    ApiError::TimeoutError
+                } else {
+                    ApiError::NetworkError(e.to_string())
+                }
+            })?;
+
+        let status = response.status();
+
+        match status {
+            StatusCode::OK => {
+                let body = response
+                    .json::<T>()
+                    .await
+                    .context("Failed to parse response")?;
+                Ok(body)
+            }
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                Err(ApiError::AuthenticationError.into())
+            }
+            StatusCode::NOT_FOUND => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::NotFoundError(message).into())
+            }
+            StatusCode::TOO_MANY_REQUESTS => Err(ApiError::RateLimitError.into()),
+            _ => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                }
+                .into())
+            }
+        }
+    }
+
+    /// Make an authenticated PATCH request to v2 API
+    async fn patch_v2<T: DeserializeOwned, B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T> {
+        let url = format!("{}/api/public/v2{}", self.host, path);
+
+        let response = self
+            .client
+            .patch(&url)
+            .basic_auth(&self.public_key, Some(&self.secret_key))
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    ApiError::TimeoutError
+                } else {
+                    ApiError::NetworkError(e.to_string())
+                }
+            })?;
+
+        let status = response.status();
+
+        match status {
+            StatusCode::OK => {
+                let body = response
+                    .json::<T>()
+                    .await
+                    .context("Failed to parse response")?;
+                Ok(body)
+            }
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                Err(ApiError::AuthenticationError.into())
+            }
+            StatusCode::NOT_FOUND => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::NotFoundError(message).into())
+            }
+            StatusCode::TOO_MANY_REQUESTS => Err(ApiError::RateLimitError.into()),
+            _ => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                }
+                .into())
+            }
+        }
+    }
+
+    /// Make an authenticated DELETE request to v2 API
+    async fn delete_v2(&self, path: &str, params: &[(&str, &str)]) -> Result<()> {
+        let url = format!("{}/api/public/v2{}", self.host, path);
+
+        let mut request = self
+            .client
+            .delete(&url)
+            .basic_auth(&self.public_key, Some(&self.secret_key));
+
+        if !params.is_empty() {
+            request = request.query(params);
+        }
+
+        let response = request.send().await.map_err(|e| {
+            if e.is_timeout() {
+                ApiError::TimeoutError
+            } else {
+                ApiError::NetworkError(e.to_string())
+            }
+        })?;
+
+        let status = response.status();
+
+        match status {
+            StatusCode::NO_CONTENT | StatusCode::OK => Ok(()),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                Err(ApiError::AuthenticationError.into())
+            }
+            StatusCode::NOT_FOUND => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::NotFoundError(message).into())
+            }
+            StatusCode::TOO_MANY_REQUESTS => Err(ApiError::RateLimitError.into()),
+            _ => {
+                let message = response.text().await.unwrap_or_default();
+                Err(ApiError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                }
+                .into())
+            }
+        }
+    }
+
     /// Make an authenticated POST request
     async fn post<T: DeserializeOwned, B: serde::Serialize>(
         &self,
@@ -625,7 +773,102 @@ impl LangfuseClient {
         let params_refs: Vec<(&str, &str)> =
             params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.get_v2(&format!("/prompts/{}", name), &params_refs).await
+        self.get_v2(&format!("/prompts/{}", name), &params_refs)
+            .await
+    }
+
+    /// Create a text prompt
+    pub async fn create_text_prompt(
+        &self,
+        name: &str,
+        prompt: &str,
+        labels: Option<&[String]>,
+        tags: Option<&[String]>,
+        config: Option<&serde_json::Value>,
+    ) -> Result<Prompt> {
+        let mut body = serde_json::json!({
+            "name": name,
+            "type": "text",
+            "prompt": prompt,
+        });
+
+        if let Some(l) = labels {
+            body["labels"] = serde_json::json!(l);
+        }
+        if let Some(t) = tags {
+            body["tags"] = serde_json::json!(t);
+        }
+        if let Some(c) = config {
+            body["config"] = c.clone();
+        }
+
+        self.post_v2("/prompts", &body).await
+    }
+
+    /// Create a chat prompt
+    pub async fn create_chat_prompt(
+        &self,
+        name: &str,
+        messages: &[ChatMessage],
+        labels: Option<&[String]>,
+        tags: Option<&[String]>,
+        config: Option<&serde_json::Value>,
+    ) -> Result<Prompt> {
+        let mut body = serde_json::json!({
+            "name": name,
+            "type": "chat",
+            "prompt": messages,
+        });
+
+        if let Some(l) = labels {
+            body["labels"] = serde_json::json!(l);
+        }
+        if let Some(t) = tags {
+            body["tags"] = serde_json::json!(t);
+        }
+        if let Some(c) = config {
+            body["config"] = c.clone();
+        }
+
+        self.post_v2("/prompts", &body).await
+    }
+
+    /// Update labels on a prompt version
+    pub async fn update_prompt_labels(
+        &self,
+        name: &str,
+        version: i32,
+        labels: &[String],
+    ) -> Result<Prompt> {
+        let body = serde_json::json!({
+            "labels": labels,
+        });
+
+        self.patch_v2(&format!("/prompts/{}/versions/{}", name, version), &body)
+            .await
+    }
+
+    /// Delete a prompt (or specific version/label)
+    pub async fn delete_prompt(
+        &self,
+        name: &str,
+        version: Option<i32>,
+        label: Option<&str>,
+    ) -> Result<()> {
+        let mut params: Vec<(&str, String)> = vec![];
+
+        if let Some(v) = version {
+            params.push(("version", v.to_string()));
+        }
+        if let Some(l) = label {
+            params.push(("label", l.to_string()));
+        }
+
+        let params_refs: Vec<(&str, &str)> =
+            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        self.delete_v2(&format!("/prompts/{}", name), &params_refs)
+            .await
     }
 }
 
@@ -1423,5 +1666,147 @@ mod tests {
             .unwrap();
 
         assert_eq!(traces.len(), 2);
+    }
+
+    // ========== Prompts Create/Update/Delete Tests ==========
+
+    #[tokio::test]
+    async fn test_create_text_prompt_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/v2/prompts"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "greeting",
+                "version": 1,
+                "type": "text",
+                "prompt": "Hello {{name}}!",
+                "labels": ["staging"],
+                "tags": ["test"],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client
+            .create_text_prompt(
+                "greeting",
+                "Hello {{name}}!",
+                Some(&["staging".to_string()]),
+                Some(&["test".to_string()]),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(prompt.name, "greeting");
+        assert_eq!(prompt.version, 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_chat_prompt_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/v2/prompts"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "assistant",
+                "version": 1,
+                "type": "chat",
+                "prompt": [{"role": "system", "content": "You are helpful."}],
+                "labels": [],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let messages = vec![ChatMessage {
+            role: "system".to_string(),
+            content: "You are helpful.".to_string(),
+        }];
+
+        let prompt = client
+            .create_chat_prompt("assistant", &messages, None, None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(prompt.name, "assistant");
+        assert_eq!(prompt.prompt_type, "chat");
+    }
+
+    #[tokio::test]
+    async fn test_update_prompt_labels_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("PATCH"))
+            .and(path("/api/public/v2/prompts/greeting/versions/2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "greeting",
+                "version": 2,
+                "type": "text",
+                "prompt": "Hello!",
+                "labels": ["production"],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client
+            .update_prompt_labels("greeting", 2, &["production".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(prompt.labels, vec!["production"]);
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("DELETE"))
+            .and(path("/api/public/v2/prompts/greeting"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.delete_prompt("greeting", None, None).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_with_version() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("DELETE"))
+            .and(path("/api/public/v2/prompts/greeting"))
+            .and(query_param("version", "1"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.delete_prompt("greeting", Some(1), None).await;
+
+        assert!(result.is_ok());
     }
 }
