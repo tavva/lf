@@ -398,7 +398,7 @@ impl PromptsCommands {
                 } else {
                     format_and_output(
                         &prompt,
-                        format.unwrap_or(OutputFormat::Table),
+                        format.unwrap_or(OutputFormat::Json),
                         output.as_deref(),
                         *verbose,
                     )
