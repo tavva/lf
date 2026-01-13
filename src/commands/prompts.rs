@@ -118,6 +118,10 @@ pub enum PromptsCommands {
         #[arg(short, long)]
         file: Option<String>,
 
+        /// Commit message for this version
+        #[arg(short, long)]
+        message: Option<String>,
+
         /// Labels to apply
         #[arg(short, long)]
         labels: Option<Vec<String>>,
@@ -168,6 +172,10 @@ pub enum PromptsCommands {
         /// Read JSON messages from file (reads stdin if omitted)
         #[arg(short, long)]
         file: Option<String>,
+
+        /// Commit message for this version
+        #[arg(short, long)]
+        message: Option<String>,
 
         /// Labels to apply
         #[arg(short, long)]
@@ -408,6 +416,7 @@ impl PromptsCommands {
             PromptsCommands::CreateText {
                 name,
                 file,
+                message,
                 labels,
                 tags,
                 config: cfg,
@@ -452,6 +461,7 @@ impl PromptsCommands {
                         labels.as_deref(),
                         tags.as_deref(),
                         parsed_config.as_ref(),
+                        message.as_deref(),
                     )
                     .await?;
 
@@ -466,6 +476,7 @@ impl PromptsCommands {
             PromptsCommands::CreateChat {
                 name,
                 file,
+                message,
                 labels,
                 tags,
                 config: cfg,
@@ -511,6 +522,7 @@ impl PromptsCommands {
                         labels.as_deref(),
                         tags.as_deref(),
                         parsed_config.as_ref(),
+                        message.as_deref(),
                     )
                     .await?;
 

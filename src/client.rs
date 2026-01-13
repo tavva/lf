@@ -821,6 +821,7 @@ impl LangfuseClient {
         labels: Option<&[String]>,
         tags: Option<&[String]>,
         config: Option<&serde_json::Value>,
+        commit_message: Option<&str>,
     ) -> Result<Prompt> {
         let mut body = serde_json::json!({
             "name": name,
@@ -837,6 +838,9 @@ impl LangfuseClient {
         if let Some(c) = config {
             body["config"] = c.clone();
         }
+        if let Some(m) = commit_message {
+            body["commitMessage"] = serde_json::json!(m);
+        }
 
         self.post_v2("/prompts", &body).await
     }
@@ -849,6 +853,7 @@ impl LangfuseClient {
         labels: Option<&[String]>,
         tags: Option<&[String]>,
         config: Option<&serde_json::Value>,
+        commit_message: Option<&str>,
     ) -> Result<Prompt> {
         let mut body = serde_json::json!({
             "name": name,
@@ -864,6 +869,9 @@ impl LangfuseClient {
         }
         if let Some(c) = config {
             body["config"] = c.clone();
+        }
+        if let Some(m) = commit_message {
+            body["commitMessage"] = serde_json::json!(m);
         }
 
         self.post_v2("/prompts", &body).await
@@ -1735,6 +1743,7 @@ mod tests {
                 Some(&["staging".to_string()]),
                 Some(&["test".to_string()]),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1771,7 +1780,7 @@ mod tests {
         }];
 
         let prompt = client
-            .create_chat_prompt("assistant", &messages, None, None, None)
+            .create_chat_prompt("assistant", &messages, None, None, None, None)
             .await
             .unwrap();
 
@@ -2001,7 +2010,7 @@ mod tests {
         let client = LangfuseClient::new(&config).unwrap();
 
         let result = client
-            .create_text_prompt("test", "content", None, None, None)
+            .create_text_prompt("test", "content", None, None, None, None)
             .await;
 
         assert!(result.is_err());
@@ -2119,7 +2128,7 @@ mod tests {
         let client = LangfuseClient::new(&config).unwrap();
 
         let result = client
-            .create_text_prompt("test-prompt", "Test content", None, None, None)
+            .create_text_prompt("test-prompt", "Test content", None, None, None, None)
             .await;
 
         assert!(result.is_ok(), "201 Created should be treated as success");
