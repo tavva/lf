@@ -1,4 +1,5 @@
 pub mod config;
+pub mod datasets;
 pub mod metrics;
 pub mod observations;
 pub mod prompts;

@@ -8,6 +8,7 @@ mod formatters;
 mod types;
 
 use commands::config::ConfigCommands;
+use commands::datasets::DatasetsCommands;
 use commands::metrics::MetricsCommands;
 use commands::observations::ObservationsCommands;
 use commands::prompts::PromptsCommands;
@@ -56,6 +57,10 @@ enum Commands {
     /// Manage prompts
     #[command(subcommand)]
     Prompts(PromptsCommands),
+
+    /// Manage datasets for evaluation
+    #[command(subcommand)]
+    Datasets(DatasetsCommands),
 }
 
 #[tokio::main]
@@ -73,5 +78,6 @@ async fn main() -> Result<()> {
         Commands::Scores(cmd) => cmd.execute().await,
         Commands::Metrics(cmd) => cmd.execute().await,
         Commands::Prompts(cmd) => cmd.execute().await,
+        Commands::Datasets(cmd) => cmd.execute().await,
     }
 }

@@ -914,6 +914,210 @@ impl LangfuseClient {
         self.delete_v2(&format!("/prompts/{}", name), &params_refs)
             .await
     }
+
+    // ========== Datasets API ==========
+
+    /// List datasets with optional pagination
+    pub async fn list_datasets(&self, limit: u32, page: u32) -> Result<Vec<Dataset>> {
+        let mut all_datasets = Vec::new();
+        let mut current_page = page;
+        let page_size = std::cmp::min(limit, 100);
+
+        loop {
+            let params: Vec<(&str, String)> = vec![
+                ("limit", page_size.to_string()),
+                ("page", current_page.to_string()),
+            ];
+
+            let params_refs: Vec<(&str, &str)> =
+                params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+            let response: DatasetsResponse = self.get_v2("/datasets", &params_refs).await?;
+
+            all_datasets.extend(response.data);
+
+            if all_datasets.len() >= limit as usize {
+                all_datasets.truncate(limit as usize);
+                break;
+            }
+
+            if let Some(meta) = &response.meta {
+                if let Some(total_pages) = meta.total_pages {
+                    if current_page >= total_pages as u32 {
+                        break;
+                    }
+                }
+            }
+
+            current_page += 1;
+        }
+
+        Ok(all_datasets)
+    }
+
+    /// Get a dataset by name
+    pub async fn get_dataset(&self, name: &str) -> Result<Dataset> {
+        self.get_v2(&format!("/datasets/{}", name), &[]).await
+    }
+
+    /// Create a new dataset
+    pub async fn create_dataset(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        metadata: Option<&serde_json::Value>,
+    ) -> Result<Dataset> {
+        let mut body = serde_json::json!({
+            "name": name,
+        });
+
+        if let Some(d) = description {
+            body["description"] = serde_json::json!(d);
+        }
+        if let Some(m) = metadata {
+            body["metadata"] = m.clone();
+        }
+
+        self.post_v2("/datasets", &body).await
+    }
+
+    // ========== Dataset Items API ==========
+
+    /// List dataset items with optional filters
+    pub async fn list_dataset_items(
+        &self,
+        dataset_name: Option<&str>,
+        limit: u32,
+        page: u32,
+    ) -> Result<Vec<DatasetItem>> {
+        let mut all_items = Vec::new();
+        let mut current_page = page;
+        let page_size = std::cmp::min(limit, 100);
+
+        loop {
+            let mut params: Vec<(&str, String)> = vec![
+                ("limit", page_size.to_string()),
+                ("page", current_page.to_string()),
+            ];
+
+            if let Some(name) = dataset_name {
+                params.push(("datasetName", name.to_string()));
+            }
+
+            let params_refs: Vec<(&str, &str)> =
+                params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+            let response: DatasetItemsResponse = self.get("/dataset-items", &params_refs).await?;
+
+            all_items.extend(response.data);
+
+            if all_items.len() >= limit as usize {
+                all_items.truncate(limit as usize);
+                break;
+            }
+
+            if let Some(meta) = &response.meta {
+                if let Some(total_pages) = meta.total_pages {
+                    if current_page >= total_pages as u32 {
+                        break;
+                    }
+                }
+            }
+
+            current_page += 1;
+        }
+
+        Ok(all_items)
+    }
+
+    /// Get a dataset item by ID
+    pub async fn get_dataset_item(&self, id: &str) -> Result<DatasetItem> {
+        self.get(&format!("/dataset-items/{}", id), &[]).await
+    }
+
+    /// Create a dataset item
+    pub async fn create_dataset_item(
+        &self,
+        dataset_name: &str,
+        input: &serde_json::Value,
+        expected_output: Option<&serde_json::Value>,
+        metadata: Option<&serde_json::Value>,
+        source_trace_id: Option<&str>,
+        source_observation_id: Option<&str>,
+    ) -> Result<DatasetItem> {
+        let mut body = serde_json::json!({
+            "datasetName": dataset_name,
+            "input": input,
+        });
+
+        if let Some(eo) = expected_output {
+            body["expectedOutput"] = eo.clone();
+        }
+        if let Some(m) = metadata {
+            body["metadata"] = m.clone();
+        }
+        if let Some(tid) = source_trace_id {
+            body["sourceTraceId"] = serde_json::json!(tid);
+        }
+        if let Some(oid) = source_observation_id {
+            body["sourceObservationId"] = serde_json::json!(oid);
+        }
+
+        self.post("/dataset-items", &body).await
+    }
+
+    // ========== Dataset Runs API ==========
+
+    /// List dataset runs for a dataset
+    pub async fn list_dataset_runs(
+        &self,
+        dataset_name: &str,
+        limit: u32,
+        page: u32,
+    ) -> Result<Vec<DatasetRun>> {
+        let mut all_runs = Vec::new();
+        let mut current_page = page;
+        let page_size = std::cmp::min(limit, 100);
+
+        loop {
+            let params: Vec<(&str, String)> = vec![
+                ("limit", page_size.to_string()),
+                ("page", current_page.to_string()),
+            ];
+
+            let params_refs: Vec<(&str, &str)> =
+                params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+            let response: DatasetRunsResponse = self
+                .get(&format!("/datasets/{}/runs", dataset_name), &params_refs)
+                .await?;
+
+            all_runs.extend(response.data);
+
+            if all_runs.len() >= limit as usize {
+                all_runs.truncate(limit as usize);
+                break;
+            }
+
+            if let Some(meta) = &response.meta {
+                if let Some(total_pages) = meta.total_pages {
+                    if current_page >= total_pages as u32 {
+                        break;
+                    }
+                }
+            }
+
+            current_page += 1;
+        }
+
+        Ok(all_runs)
+    }
+
+    /// Get a dataset run by name
+    pub async fn get_dataset_run(&self, dataset_name: &str, run_name: &str) -> Result<DatasetRun> {
+        self.get(&format!("/datasets/{}/runs/{}", dataset_name, run_name), &[])
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -2135,5 +2339,222 @@ mod tests {
         let prompt = result.unwrap();
         assert_eq!(prompt.name, "test-prompt");
         assert_eq!(prompt.version, 1);
+    }
+
+    // ========== Datasets API Tests ==========
+
+    #[tokio::test]
+    async fn test_list_datasets_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/datasets"))
+            .and(query_param("limit", "50"))
+            .and(query_param("page", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "ds-1", "name": "dataset-1", "description": "First dataset"},
+                    {"id": "ds-2", "name": "dataset-2"}
+                ],
+                "meta": {
+                    "page": 1,
+                    "limit": 50,
+                    "totalItems": 2,
+                    "totalPages": 1
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let datasets = client.list_datasets(50, 1).await.unwrap();
+
+        assert_eq!(datasets.len(), 2);
+        assert_eq!(datasets[0].name, "dataset-1");
+        assert_eq!(datasets[1].name, "dataset-2");
+    }
+
+    #[tokio::test]
+    async fn test_get_dataset_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/datasets/my-dataset"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "ds-123",
+                "name": "my-dataset",
+                "description": "Test dataset",
+                "projectId": "proj-456"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let dataset = client.get_dataset("my-dataset").await.unwrap();
+
+        assert_eq!(dataset.id, "ds-123");
+        assert_eq!(dataset.name, "my-dataset");
+    }
+
+    #[tokio::test]
+    async fn test_create_dataset_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/v2/datasets"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+                "id": "ds-new",
+                "name": "new-dataset",
+                "description": "A new dataset"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let dataset = client
+            .create_dataset("new-dataset", Some("A new dataset"), None)
+            .await
+            .unwrap();
+
+        assert_eq!(dataset.name, "new-dataset");
+    }
+
+    #[tokio::test]
+    async fn test_list_dataset_items_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/dataset-items"))
+            .and(query_param("datasetName", "my-dataset"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "item-1", "datasetName": "my-dataset", "input": {"prompt": "Hello"}},
+                    {"id": "item-2", "datasetName": "my-dataset", "input": {"prompt": "World"}}
+                ],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let items = client
+            .list_dataset_items(Some("my-dataset"), 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "item-1");
+    }
+
+    #[tokio::test]
+    async fn test_get_dataset_item_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/dataset-items/item-123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "item-123",
+                "datasetName": "my-dataset",
+                "input": {"prompt": "Test"},
+                "expectedOutput": {"response": "Expected"}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let item = client.get_dataset_item("item-123").await.unwrap();
+
+        assert_eq!(item.id, "item-123");
+    }
+
+    #[tokio::test]
+    async fn test_create_dataset_item_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/dataset-items"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+                "id": "item-new",
+                "datasetName": "my-dataset",
+                "input": {"prompt": "New item"}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let input = json!({"prompt": "New item"});
+        let item = client
+            .create_dataset_item("my-dataset", &input, None, None, None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(item.id, "item-new");
+    }
+
+    #[tokio::test]
+    async fn test_list_dataset_runs_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/datasets/my-dataset/runs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"id": "run-1", "name": "eval-run-1", "datasetName": "my-dataset"},
+                    {"id": "run-2", "name": "eval-run-2", "datasetName": "my-dataset"}
+                ],
+                "meta": {"totalPages": 1}
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let runs = client
+            .list_dataset_runs("my-dataset", 50, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].name, "eval-run-1");
+    }
+
+    #[tokio::test]
+    async fn test_get_dataset_run_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/datasets/my-dataset/runs/eval-run"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "run-123",
+                "name": "eval-run",
+                "datasetName": "my-dataset",
+                "description": "Evaluation run"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let run = client
+            .get_dataset_run("my-dataset", "eval-run")
+            .await
+            .unwrap();
+
+        assert_eq!(run.id, "run-123");
+        assert_eq!(run.name, "eval-run");
     }
 }

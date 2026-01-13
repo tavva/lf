@@ -308,6 +308,100 @@ pub struct CreateScoreResponse {
     pub id: String,
 }
 
+/// Dataset status
+#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum DatasetStatus {
+    Active,
+    Archived,
+}
+
+/// A dataset from Langfuse
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Dataset {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+    pub project_id: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// A dataset item from Langfuse
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetItem {
+    pub id: String,
+    pub status: Option<String>,
+    pub input: Option<serde_json::Value>,
+    pub expected_output: Option<serde_json::Value>,
+    pub metadata: Option<serde_json::Value>,
+    pub source_trace_id: Option<String>,
+    pub source_observation_id: Option<String>,
+    pub dataset_id: Option<String>,
+    pub dataset_name: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// A dataset run from Langfuse
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetRun {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+    pub dataset_id: Option<String>,
+    pub dataset_name: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// A dataset run item from Langfuse
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetRunItem {
+    pub id: String,
+    pub dataset_run_id: Option<String>,
+    pub dataset_run_name: Option<String>,
+    pub dataset_item_id: Option<String>,
+    pub trace_id: Option<String>,
+    pub observation_id: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// API response wrapper for datasets
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatasetsResponse {
+    pub data: Vec<Dataset>,
+    pub meta: Option<PaginationMeta>,
+}
+
+/// API response wrapper for dataset items
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatasetItemsResponse {
+    pub data: Vec<DatasetItem>,
+    pub meta: Option<PaginationMeta>,
+}
+
+/// API response wrapper for dataset runs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatasetRunsResponse {
+    pub data: Vec<DatasetRun>,
+    pub meta: Option<PaginationMeta>,
+}
+
+/// API response wrapper for dataset run items
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatasetRunItemsResponse {
+    pub data: Vec<DatasetRunItem>,
+    pub meta: Option<PaginationMeta>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -929,5 +1023,153 @@ mod tests {
 
         assert_eq!(response.data.len(), 2);
         assert_eq!(response.data[0].name, "p1");
+    }
+
+    // ========== Dataset Tests ==========
+
+    #[test]
+    fn test_dataset_deserialize() {
+        let json = json!({
+            "id": "dataset-123",
+            "name": "my-dataset",
+            "description": "Test dataset",
+            "metadata": {"key": "value"},
+            "projectId": "project-456",
+            "createdAt": "2024-01-15T10:00:00Z",
+            "updatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let dataset: Dataset = serde_json::from_value(json).unwrap();
+
+        assert_eq!(dataset.id, "dataset-123");
+        assert_eq!(dataset.name, "my-dataset");
+        assert_eq!(dataset.description, Some("Test dataset".to_string()));
+        assert_eq!(dataset.project_id, Some("project-456".to_string()));
+    }
+
+    #[test]
+    fn test_dataset_minimal() {
+        let json = json!({
+            "id": "dataset-min",
+            "name": "minimal"
+        });
+
+        let dataset: Dataset = serde_json::from_value(json).unwrap();
+
+        assert_eq!(dataset.id, "dataset-min");
+        assert_eq!(dataset.name, "minimal");
+        assert!(dataset.description.is_none());
+    }
+
+    #[test]
+    fn test_dataset_item_deserialize() {
+        let json = json!({
+            "id": "item-123",
+            "status": "ACTIVE",
+            "input": {"prompt": "Hello"},
+            "expectedOutput": {"response": "World"},
+            "metadata": {"version": 1},
+            "sourceTraceId": "trace-789",
+            "sourceObservationId": "obs-456",
+            "datasetId": "dataset-123",
+            "datasetName": "my-dataset",
+            "createdAt": "2024-01-15T10:00:00Z",
+            "updatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let item: DatasetItem = serde_json::from_value(json).unwrap();
+
+        assert_eq!(item.id, "item-123");
+        assert_eq!(item.status, Some("ACTIVE".to_string()));
+        assert_eq!(item.source_trace_id, Some("trace-789".to_string()));
+        assert_eq!(item.dataset_name, Some("my-dataset".to_string()));
+    }
+
+    #[test]
+    fn test_dataset_run_deserialize() {
+        let json = json!({
+            "id": "run-123",
+            "name": "evaluation-run",
+            "description": "Evaluation of model v2",
+            "metadata": {"model": "gpt-4"},
+            "datasetId": "dataset-456",
+            "datasetName": "my-dataset",
+            "createdAt": "2024-01-15T10:00:00Z",
+            "updatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let run: DatasetRun = serde_json::from_value(json).unwrap();
+
+        assert_eq!(run.id, "run-123");
+        assert_eq!(run.name, "evaluation-run");
+        assert_eq!(run.dataset_name, Some("my-dataset".to_string()));
+    }
+
+    #[test]
+    fn test_dataset_run_item_deserialize() {
+        let json = json!({
+            "id": "runitem-123",
+            "datasetRunId": "run-456",
+            "datasetRunName": "eval-run",
+            "datasetItemId": "item-789",
+            "traceId": "trace-abc",
+            "observationId": "obs-def",
+            "createdAt": "2024-01-15T10:00:00Z",
+            "updatedAt": "2024-01-15T10:00:00Z"
+        });
+
+        let run_item: DatasetRunItem = serde_json::from_value(json).unwrap();
+
+        assert_eq!(run_item.id, "runitem-123");
+        assert_eq!(run_item.dataset_run_id, Some("run-456".to_string()));
+        assert_eq!(run_item.trace_id, Some("trace-abc".to_string()));
+    }
+
+    #[test]
+    fn test_datasets_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"id": "ds-1", "name": "dataset-1"},
+                {"id": "ds-2", "name": "dataset-2"}
+            ],
+            "meta": {
+                "page": 1,
+                "limit": 50,
+                "totalItems": 2,
+                "totalPages": 1
+            }
+        });
+
+        let response: DatasetsResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+        assert_eq!(response.data[0].name, "dataset-1");
+    }
+
+    #[test]
+    fn test_dataset_items_response_deserialize() {
+        let json = json!({
+            "data": [
+                {"id": "item-1", "datasetName": "ds"},
+                {"id": "item-2", "datasetName": "ds"}
+            ],
+            "meta": {"totalPages": 1}
+        });
+
+        let response: DatasetItemsResponse = serde_json::from_value(json).unwrap();
+
+        assert_eq!(response.data.len(), 2);
+    }
+
+    #[test]
+    fn test_dataset_status_serialize() {
+        assert_eq!(
+            serde_json::to_string(&DatasetStatus::Active).unwrap(),
+            "\"ACTIVE\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DatasetStatus::Archived).unwrap(),
+            "\"ARCHIVED\""
+        );
     }
 }

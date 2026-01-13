@@ -16,9 +16,8 @@ cargo build          # Debug build
 cargo build --release  # Optimised release build (uses LTO, strips symbols)
 cargo run -- <args>  # Run with arguments, e.g. cargo run -- traces list --limit 10
 cargo install --path .  # Install to ~/.cargo/bin/lf
+cargo test            # Run all tests
 ```
-
-No test framework is set up yet.
 
 ## Architecture
 
@@ -29,8 +28,8 @@ src/
 ├── main.rs         # CLI entry point, routes to Commands enum
 ├── client.rs       # LangfuseClient - HTTP client with basic auth, handles pagination
 ├── config.rs       # Profile-based config (~/.config/langfuse/config.yml)
-├── types.rs        # API response structs (Trace, Session, Observation, Score, etc.)
-├── commands/       # One module per resource (traces, sessions, observations, scores, metrics, config)
+├── types.rs        # API response structs (Trace, Session, Observation, Score, Dataset, etc.)
+├── commands/       # One module per resource (traces, sessions, observations, scores, metrics, prompts, datasets, config)
 └── formatters/     # Output renderers (table, json, csv, markdown)
 ```
 
@@ -42,8 +41,10 @@ lf config {setup,set,show,list}
 lf traces {list,get}
 lf sessions {list,show}
 lf observations {list,get}
-lf scores {list,get}
+lf scores {list,get,create}
 lf metrics query
+lf prompts {list,get,create-text,create-chat,label,delete}
+lf datasets {list,get,create,items,item-get,item-create,runs,run-get}
 ```
 
 ## Key Patterns
