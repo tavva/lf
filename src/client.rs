@@ -191,7 +191,7 @@ impl LangfuseClient {
         let status = response.status();
 
         match status {
-            StatusCode::OK => {
+            StatusCode::OK | StatusCode::CREATED => {
                 let body = response
                     .json::<T>()
                     .await
@@ -339,7 +339,7 @@ impl LangfuseClient {
         let status = response.status();
 
         match status {
-            StatusCode::OK => {
+            StatusCode::OK | StatusCode::CREATED => {
                 let body = response
                     .json::<T>()
                     .await
@@ -1970,5 +1970,38 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Rate limit"));
+    }
+
+    #[tokio::test]
+    async fn test_create_prompt_handles_201_created() {
+        let mock_server = MockServer::start().await;
+
+        // API returns 201 Created for successful resource creation
+        Mock::given(method("POST"))
+            .and(path("/api/public/v2/prompts"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+                "name": "test-prompt",
+                "version": 1,
+                "type": "text",
+                "prompt": "Test content",
+                "labels": [],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .create_text_prompt("test-prompt", "Test content", None, None, None)
+            .await;
+
+        assert!(result.is_ok(), "201 Created should be treated as success");
+        let prompt = result.unwrap();
+        assert_eq!(prompt.name, "test-prompt");
+        assert_eq!(prompt.version, 1);
     }
 }
