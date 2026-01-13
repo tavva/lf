@@ -637,6 +637,42 @@ impl LangfuseClient {
         self.get(&format!("/scores/{id}"), &[]).await
     }
 
+    /// Create a new score
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_score(
+        &self,
+        name: &str,
+        value: f64,
+        trace_id: Option<&str>,
+        observation_id: Option<&str>,
+        session_id: Option<&str>,
+        data_type: Option<&str>,
+        comment: Option<&str>,
+    ) -> Result<CreateScoreResponse> {
+        let mut body = serde_json::json!({
+            "name": name,
+            "value": value,
+        });
+
+        if let Some(tid) = trace_id {
+            body["traceId"] = serde_json::json!(tid);
+        }
+        if let Some(oid) = observation_id {
+            body["observationId"] = serde_json::json!(oid);
+        }
+        if let Some(sid) = session_id {
+            body["sessionId"] = serde_json::json!(sid);
+        }
+        if let Some(dt) = data_type {
+            body["dataType"] = serde_json::json!(dt);
+        }
+        if let Some(c) = comment {
+            body["comment"] = serde_json::json!(c);
+        }
+
+        self.post("/scores", &body).await
+    }
+
     // ========== Metrics API ==========
 
     /// Query metrics
@@ -1970,6 +2006,93 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Rate limit"));
+    }
+
+    // ========== Score Creation Tests ==========
+
+    #[tokio::test]
+    async fn test_create_score_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/scores"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "score-abc123"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .create_score(
+                "accuracy",
+                0.95,
+                Some("trace-123"),
+                None,
+                None,
+                Some("NUMERIC"),
+                Some("Good result"),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.id, "score-abc123");
+    }
+
+    #[tokio::test]
+    async fn test_create_score_with_observation() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/scores"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "score-def456"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .create_score(
+                "relevance",
+                0.88,
+                Some("trace-123"),
+                Some("obs-456"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.id, "score-def456");
+    }
+
+    #[tokio::test]
+    async fn test_create_score_handles_201_created() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/scores"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+                "id": "score-new"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .create_score("test", 1.0, Some("trace-1"), None, None, None, None)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().id, "score-new");
     }
 
     #[tokio::test]

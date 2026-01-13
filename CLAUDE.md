@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `lf` is a Rust CLI for the Langfuse LLM observability platform. It queries traces, sessions, observations, scores, and metrics via the Langfuse API, with output in table, JSON, CSV, or markdown formats.
 
+**API Reference:** https://cloud.langfuse.com/generated/api/openapi.yml
+
 ## Development Commands
 
 ```bash

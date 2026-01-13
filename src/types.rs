@@ -302,6 +302,12 @@ pub struct PromptsResponse {
     pub meta: Option<PaginationMeta>,
 }
 
+/// Response from creating a score
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateScoreResponse {
+    pub id: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
