@@ -1809,4 +1809,166 @@ mod tests {
 
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_get_prompt_with_label() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts/welcome"))
+            .and(query_param("label", "staging"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "welcome",
+                "version": 2,
+                "type": "text",
+                "prompt": "Staging version",
+                "labels": ["staging"],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client
+            .get_prompt("welcome", None, Some("staging"))
+            .await
+            .unwrap();
+
+        assert_eq!(prompt.labels, vec!["staging"]);
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_with_label() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("DELETE"))
+            .and(path("/api/public/v2/prompts/greeting"))
+            .and(query_param("label", "staging"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .delete_prompt("greeting", None, Some("staging"))
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_list_prompts_pagination() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts"))
+            .and(query_param("page", "1"))
+            .and(query_param("limit", "3"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"name": "prompt-1", "versions": [1], "labels": [], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"},
+                    {"name": "prompt-2", "versions": [1], "labels": [], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"}
+                ],
+                "meta": {
+                    "page": 1,
+                    "totalPages": 2
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts"))
+            .and(query_param("page", "2"))
+            .and(query_param("limit", "3"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [
+                    {"name": "prompt-3", "versions": [1], "labels": [], "tags": [], "lastUpdatedAt": "2024-01-15T10:00:00Z"}
+                ],
+                "meta": {
+                    "page": 2,
+                    "totalPages": 2
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompts = client.list_prompts(None, None, None, 3, 1).await.unwrap();
+
+        assert_eq!(prompts.len(), 3);
+        assert_eq!(prompts[0].name, "prompt-1");
+        assert_eq!(prompts[2].name, "prompt-3");
+    }
+
+    #[tokio::test]
+    async fn test_get_prompt_not_found() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts/nonexistent"))
+            .respond_with(ResponseTemplate::new(404).set_body_string("Prompt not found"))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.get_prompt("nonexistent", None, None).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string().to_lowercase();
+        assert!(err_msg.contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_list_prompts_auth_failure() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client.list_prompts(None, None, None, 50, 1).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Authentication failed"));
+    }
+
+    #[tokio::test]
+    async fn test_create_prompt_rate_limit() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/api/public/v2/prompts"))
+            .respond_with(ResponseTemplate::new(429))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .create_text_prompt("test", "content", None, None, None)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Rate limit"));
+    }
 }
