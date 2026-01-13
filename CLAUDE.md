@@ -15,6 +15,7 @@ cargo check          # Quick compilation check
 cargo build          # Debug build
 cargo build --release  # Optimised release build (uses LTO, strips symbols)
 cargo run -- <args>  # Run with arguments, e.g. cargo run -- traces list --limit 10
+cargo install --path .  # Install to ~/.cargo/bin/lf
 ```
 
 No test framework is set up yet.
