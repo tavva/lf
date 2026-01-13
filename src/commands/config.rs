@@ -1,9 +1,18 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use dialoguer::{Input, Password};
+use std::io::{self, Write};
 
 use crate::client::LangfuseClient;
 use crate::config::Config;
+
+fn read_line_with_prompt(prompt: &str) -> Result<String> {
+    print!("{}: ", prompt);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(input.trim().to_string())
+}
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommands {
@@ -77,7 +86,7 @@ impl ConfigCommands {
             .default("default".to_string())
             .interact_text()?;
 
-        let public_key: String = Input::new().with_prompt("Public key").interact_text()?;
+        let public_key = read_line_with_prompt("Public key")?;
 
         let secret_key: String = Password::new().with_prompt("Secret key").interact()?;
 
