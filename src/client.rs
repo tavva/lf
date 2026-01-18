@@ -885,7 +885,7 @@ impl LangfuseClient {
         labels: &[String],
     ) -> Result<Prompt> {
         let body = serde_json::json!({
-            "labels": labels,
+            "newLabels": labels,
         });
 
         self.patch_v2(&format!("/prompts/{}/versions/{}", name, version), &body)
@@ -1124,7 +1124,7 @@ impl LangfuseClient {
 mod tests {
     use super::*;
     use serde_json::json;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn create_test_config(host: &str) -> Config {
@@ -1998,6 +1998,9 @@ mod tests {
 
         Mock::given(method("PATCH"))
             .and(path("/api/public/v2/prompts/greeting/versions/2"))
+            .and(body_json(json!({
+                "newLabels": ["production"]
+            })))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "name": "greeting",
                 "version": 2,
