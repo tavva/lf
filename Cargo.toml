@@ -44,6 +44,9 @@ dialoguer = "0.11"
 # Environment
 dotenvy = "0.15"
 
+# URL encoding
+urlencoding = "2"
+
 [dev-dependencies]
 # HTTP mocking for tests
 wiremock = "0.6"

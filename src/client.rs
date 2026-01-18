@@ -3,6 +3,7 @@ use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use thiserror::Error;
+use urlencoding::encode;
 
 use crate::config::Config;
 use crate::types::*;
@@ -809,7 +810,7 @@ impl LangfuseClient {
         let params_refs: Vec<(&str, &str)> =
             params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.get_v2(&format!("/prompts/{}", name), &params_refs)
+        self.get_v2(&format!("/prompts/{}", encode(name)), &params_refs)
             .await
     }
 
@@ -888,8 +889,11 @@ impl LangfuseClient {
             "newLabels": labels,
         });
 
-        self.patch_v2(&format!("/prompts/{}/versions/{}", name, version), &body)
-            .await
+        self.patch_v2(
+            &format!("/prompts/{}/versions/{}", encode(name), version),
+            &body,
+        )
+        .await
     }
 
     /// Delete a prompt (or specific version/label)
@@ -911,7 +915,7 @@ impl LangfuseClient {
         let params_refs: Vec<(&str, &str)> =
             params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.delete_v2(&format!("/prompts/{}", name), &params_refs)
+        self.delete_v2(&format!("/prompts/{}", encode(name)), &params_refs)
             .await
     }
 
@@ -2109,6 +2113,93 @@ mod tests {
 
         let result = client
             .delete_prompt("greeting", None, Some("staging"))
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    // ========== URL Encoding Tests ==========
+
+    #[tokio::test]
+    async fn test_update_prompt_labels_url_encodes_name_with_slash() {
+        let mock_server = MockServer::start().await;
+
+        // The prompt name contains a slash which must be URL-encoded as %2F
+        Mock::given(method("PATCH"))
+            .and(path("/api/public/v2/prompts/customer%2Fgenerate-yaml/versions/1"))
+            .and(body_json(json!({
+                "newLabels": ["production"]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "customer/generate-yaml",
+                "version": 1,
+                "type": "text",
+                "prompt": "Content",
+                "labels": ["production"],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client
+            .update_prompt_labels("customer/generate-yaml", 1, &["production".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(prompt.name, "customer/generate-yaml");
+        assert_eq!(prompt.labels, vec!["production"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_prompt_url_encodes_name_with_slash() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/public/v2/prompts/customer%2Fgenerate-yaml"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "name": "customer/generate-yaml",
+                "version": 1,
+                "type": "text",
+                "prompt": "Content",
+                "labels": [],
+                "tags": [],
+                "createdAt": "2024-01-15T10:00:00Z",
+                "updatedAt": "2024-01-15T10:00:00Z"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let prompt = client
+            .get_prompt("customer/generate-yaml", None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(prompt.name, "customer/generate-yaml");
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_url_encodes_name_with_slash() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("DELETE"))
+            .and(path("/api/public/v2/prompts/customer%2Fgenerate-yaml"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = LangfuseClient::new(&config).unwrap();
+
+        let result = client
+            .delete_prompt("customer/generate-yaml", None, None)
             .await;
 
         assert!(result.is_ok());
