@@ -79,6 +79,10 @@ pub enum TracesCommands {
         #[arg(long)]
         with_observations: bool,
 
+        /// Strip large content fields (input, output) from observations
+        #[arg(long)]
+        summary: bool,
+
         /// Output format
         #[arg(short, long, value_enum)]
         format: Option<OutputFormat>,
@@ -173,6 +177,7 @@ impl TracesCommands {
             TracesCommands::Get {
                 id,
                 with_observations,
+                summary,
                 format,
                 output,
                 profile,
@@ -210,7 +215,14 @@ impl TracesCommands {
                         .await?;
                     trace.observations = observations
                         .into_iter()
-                        .map(|o| serde_json::to_value(o).unwrap_or_default())
+                        .map(|o| {
+                            let value = serde_json::to_value(o).unwrap_or_default();
+                            if *summary {
+                                strip_observation_content(value)
+                            } else {
+                                value
+                            }
+                        })
                         .collect();
                 }
 
@@ -222,5 +234,58 @@ impl TracesCommands {
                 )
             }
         }
+    }
+}
+
+/// Strips large content fields (input, output) from an observation JSON value.
+fn strip_observation_content(mut obs: serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = obs.as_object_mut() {
+        obj.remove("input");
+        obj.remove("output");
+    }
+    obs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_strip_observation_content_removes_input_output() {
+        let obs = json!({
+            "id": "obs-123",
+            "trace_id": "trace-456",
+            "type": "GENERATION",
+            "name": "chat-completion",
+            "model": "gpt-4",
+            "input": {"messages": [{"role": "user", "content": "Hello, how are you?"}]},
+            "output": {"content": "I'm doing well, thank you for asking!"},
+            "usage": {"input_tokens": 10, "output_tokens": 15}
+        });
+
+        let result = strip_observation_content(obs);
+
+        assert!(result.get("input").is_none(), "input field should be removed");
+        assert!(result.get("output").is_none(), "output field should be removed");
+        assert_eq!(result.get("id").unwrap(), "obs-123");
+        assert_eq!(result.get("trace_id").unwrap(), "trace-456");
+        assert_eq!(result.get("type").unwrap(), "GENERATION");
+        assert_eq!(result.get("name").unwrap(), "chat-completion");
+        assert_eq!(result.get("model").unwrap(), "gpt-4");
+        assert!(result.get("usage").is_some(), "usage field should be preserved");
+    }
+
+    #[test]
+    fn test_strip_observation_content_handles_missing_fields() {
+        let obs = json!({
+            "id": "obs-123",
+            "type": "SPAN"
+        });
+
+        let result = strip_observation_content(obs);
+
+        assert_eq!(result.get("id").unwrap(), "obs-123");
+        assert_eq!(result.get("type").unwrap(), "SPAN");
     }
 }
