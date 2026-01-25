@@ -53,3 +53,7 @@ lf datasets {list,get,create,items,item-get,item-create,runs,run-get}
 - `LangfuseClient` methods return typed response structs from `types.rs`
 - Formatters receive `serde_json::Value` and render to stdout
 - Config supports multiple named profiles with credentials (public key, secret key, host URL)
+
+## More info
+
+Issues are stored in GitHub.
