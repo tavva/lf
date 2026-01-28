@@ -4,6 +4,8 @@ Unofficial command-line interface for [Langfuse](https://langfuse.com).
 
 Originally a port of [lf-cli](https://github.com/vicentereig/lf-cli) to Rust.
 
+This was built with AI assistance and should therefore be considered alpha. It's used in production and is fairly battle-tested, but please do fix/report issues.
+
 ## Quick Start
 
 ```bash
