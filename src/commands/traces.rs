@@ -266,14 +266,23 @@ mod tests {
 
         let result = strip_observation_content(obs);
 
-        assert!(result.get("input").is_none(), "input field should be removed");
-        assert!(result.get("output").is_none(), "output field should be removed");
+        assert!(
+            result.get("input").is_none(),
+            "input field should be removed"
+        );
+        assert!(
+            result.get("output").is_none(),
+            "output field should be removed"
+        );
         assert_eq!(result.get("id").unwrap(), "obs-123");
         assert_eq!(result.get("trace_id").unwrap(), "trace-456");
         assert_eq!(result.get("type").unwrap(), "GENERATION");
         assert_eq!(result.get("name").unwrap(), "chat-completion");
         assert_eq!(result.get("model").unwrap(), "gpt-4");
-        assert!(result.get("usage").is_some(), "usage field should be preserved");
+        assert!(
+            result.get("usage").is_some(),
+            "usage field should be preserved"
+        );
     }
 
     #[test]

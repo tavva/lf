@@ -393,9 +393,7 @@ impl PromptsCommands {
 
                 let client = LangfuseClient::new(&config)?;
 
-                let prompt = client
-                    .get_prompt(name, *version, label.as_deref())
-                    .await?;
+                let prompt = client.get_prompt(name, *version, label.as_deref()).await?;
 
                 if *raw {
                     let content = match &prompt.prompt {
@@ -447,10 +445,8 @@ impl PromptsCommands {
                 }
 
                 let content = read_content(file.as_deref())?;
-                let parsed_config: Option<serde_json::Value> = cfg
-                    .as_ref()
-                    .map(|c| serde_json::from_str(c))
-                    .transpose()?;
+                let parsed_config: Option<serde_json::Value> =
+                    cfg.as_ref().map(|c| serde_json::from_str(c)).transpose()?;
 
                 let client = LangfuseClient::new(&app_config)?;
 
@@ -508,10 +504,8 @@ impl PromptsCommands {
 
                 let content = read_content(file.as_deref())?;
                 let messages: Vec<ChatMessage> = serde_json::from_str(&content)?;
-                let parsed_config: Option<serde_json::Value> = cfg
-                    .as_ref()
-                    .map(|c| serde_json::from_str(c))
-                    .transpose()?;
+                let parsed_config: Option<serde_json::Value> =
+                    cfg.as_ref().map(|c| serde_json::from_str(c)).transpose()?;
 
                 let client = LangfuseClient::new(&app_config)?;
 
@@ -566,9 +560,7 @@ impl PromptsCommands {
 
                 let client = LangfuseClient::new(&config)?;
 
-                let prompt = client
-                    .update_prompt_labels(name, *version, labels)
-                    .await?;
+                let prompt = client.update_prompt_labels(name, *version, labels).await?;
 
                 format_and_output(
                     &prompt,

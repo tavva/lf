@@ -360,20 +360,6 @@ pub struct DatasetRun {
     pub updated_at: Option<String>,
 }
 
-/// A dataset run item from Langfuse
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DatasetRunItem {
-    pub id: String,
-    pub dataset_run_id: Option<String>,
-    pub dataset_run_name: Option<String>,
-    pub dataset_item_id: Option<String>,
-    pub trace_id: Option<String>,
-    pub observation_id: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-}
-
 /// API response wrapper for datasets
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatasetsResponse {
@@ -392,13 +378,6 @@ pub struct DatasetItemsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatasetRunsResponse {
     pub data: Vec<DatasetRun>,
-    pub meta: Option<PaginationMeta>,
-}
-
-/// API response wrapper for dataset run items
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatasetRunItemsResponse {
-    pub data: Vec<DatasetRunItem>,
     pub meta: Option<PaginationMeta>,
 }
 
@@ -1103,26 +1082,6 @@ mod tests {
         assert_eq!(run.id, "run-123");
         assert_eq!(run.name, "evaluation-run");
         assert_eq!(run.dataset_name, Some("my-dataset".to_string()));
-    }
-
-    #[test]
-    fn test_dataset_run_item_deserialize() {
-        let json = json!({
-            "id": "runitem-123",
-            "datasetRunId": "run-456",
-            "datasetRunName": "eval-run",
-            "datasetItemId": "item-789",
-            "traceId": "trace-abc",
-            "observationId": "obs-def",
-            "createdAt": "2024-01-15T10:00:00Z",
-            "updatedAt": "2024-01-15T10:00:00Z"
-        });
-
-        let run_item: DatasetRunItem = serde_json::from_value(json).unwrap();
-
-        assert_eq!(run_item.id, "runitem-123");
-        assert_eq!(run_item.dataset_run_id, Some("run-456".to_string()));
-        assert_eq!(run_item.trace_id, Some("trace-abc".to_string()));
     }
 
     #[test]

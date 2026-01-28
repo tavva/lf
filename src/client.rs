@@ -807,8 +807,7 @@ impl LangfuseClient {
             params.push(("label", l.to_string()));
         }
 
-        let params_refs: Vec<(&str, &str)> =
-            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let params_refs: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
         self.get_v2(&format!("/prompts/{}", encode(name)), &params_refs)
             .await
@@ -912,8 +911,7 @@ impl LangfuseClient {
             params.push(("label", l.to_string()));
         }
 
-        let params_refs: Vec<(&str, &str)> =
-            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let params_refs: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
         self.delete_v2(&format!("/prompts/{}", encode(name)), &params_refs)
             .await
@@ -1119,8 +1117,11 @@ impl LangfuseClient {
 
     /// Get a dataset run by name
     pub async fn get_dataset_run(&self, dataset_name: &str, run_name: &str) -> Result<DatasetRun> {
-        self.get(&format!("/datasets/{}/runs/{}", dataset_name, run_name), &[])
-            .await
+        self.get(
+            &format!("/datasets/{}/runs/{}", dataset_name, run_name),
+            &[],
+        )
+        .await
     }
 }
 
@@ -1743,10 +1744,7 @@ mod tests {
         let config = create_test_config(&mock_server.uri());
         let client = LangfuseClient::new(&config).unwrap();
 
-        let prompts = client
-            .list_prompts(None, None, None, 50, 1)
-            .await
-            .unwrap();
+        let prompts = client.list_prompts(None, None, None, 50, 1).await.unwrap();
 
         assert_eq!(prompts.len(), 2);
         assert_eq!(prompts[0].name, "prompt-1");
@@ -2126,7 +2124,9 @@ mod tests {
 
         // The prompt name contains a slash which must be URL-encoded as %2F
         Mock::given(method("PATCH"))
-            .and(path("/api/public/v2/prompts/customer%2Fgenerate-yaml/versions/1"))
+            .and(path(
+                "/api/public/v2/prompts/customer%2Fgenerate-yaml/versions/1",
+            ))
             .and(body_json(json!({
                 "newLabels": ["production"]
             })))
@@ -2616,10 +2616,7 @@ mod tests {
         let config = create_test_config(&mock_server.uri());
         let client = LangfuseClient::new(&config).unwrap();
 
-        let runs = client
-            .list_dataset_runs("my-dataset", 50, 1)
-            .await
-            .unwrap();
+        let runs = client.list_dataset_runs("my-dataset", 50, 1).await.unwrap();
 
         assert_eq!(runs.len(), 2);
         assert_eq!(runs[0].name, "eval-run-1");
