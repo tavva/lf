@@ -1,5 +1,7 @@
 # lf
 
+> **Retired:** Langfuse now ships an [official CLI](https://langfuse.com/docs/api-and-data-platform/features/cli). Use that instead — this repository is archived and will not receive further updates.
+
 Unofficial command-line interface for [Langfuse](https://langfuse.com).
 
 Originally a port of [lf-cli](https://github.com/vicentereig/lf-cli) to Rust.
